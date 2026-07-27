@@ -40,6 +40,14 @@
 #define BUTTON_PIN              LL_GPIO_PIN_12
 #define BUTTON_CLK_PERIPH       LL_APB2_GRP1_PERIPH_GPIOB
 
+// Definitions for our 4 LED modes
+#define MODE_LED_OFF            0U
+#define MODE_LED_ON             1U
+#define MODE_BLINK_SLOW         2U
+#define MODE_BLINK_FAST         3U
+
+#define TOTAL_MODES             4U
+
 // #define LED_BLINK_FAST_MS    100U
 // #define LED_BLINK_SLOW_MS    600U
 /* USER CODE END PD */
@@ -151,6 +159,9 @@ int main(void)
   // Local variable to store the previous state of the button
   // uint8_t lastState = 1U; // Button is High (1) by default due to pull-up
 
+  // Variable to store the current active mode
+  uint8_t currentMode = MODE_LED_OFF;
+
   while (1)
   {
     // Read the current immediate raw state of the button
@@ -165,55 +176,49 @@ int main(void)
       // Double-check if the pin is STILL pressed after 20ms
       if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
       {
-        // Verified press! Now we increment the counter by exactly 1
-        bounceCounter++;
 
-        // IMPORTANT C STEP: "Dead-loop" while the user continues to hold the wire down.
-        // This prevents the counter from increasing if you hold the button for a long time.
-        while (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+        // Button press is confirmed! Switch to the next mode
+        currentMode++;
+
+        // If we exceed the maximum modes, wrap around back to 0
+        if (currentMode >= TOTAL_MODES)
         {
-          __NOP(); // Do nothing, just wait until the user releases the wire
+          currentMode = MODE_LED_OFF;
         }
 
-        // Add a tiny delay after release to filter out the release bounce too
-        LL_mDelay(20);
+        // Wait until the user completely releases the wire/button
+        while (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+        {
+          __NOP();
+        }
+        LL_mDelay(20); // Wait out the release bounce
       }
     }
 
-    // Apply our modulo operator logic to control the LED state stably
-    if ((bounceCounter % 2U) == 0U)
+    /* 2. NEW C CONCEPT: SWITCH-CASE MENU */
+    switch (currentMode)
     {
-      LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
-    }
-    else
-    {
-      LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
-    }
-
-    /*
-    // If the state has changed compared to the last check
-    if (currentState != lastState)
-    {
-      // A change occurred! Increment the bounce counter
-      bounceCounter++;
-      // Update the last known state
-      lastState = currentState;
-    }
-
-    // New C Concept: Even/Odd logic using the Modulo operator (%)
-    // If the remainder of dividing bounceCounter by 2 is zero, the number is EVEN
-    if ((bounceCounter % 2U) == 0U)
-    {
-      // Turn the onboard LED ON (LOW is ON for Blue Pill PC13)
-      LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
-    }
-      else
-    {
-        // Turn the onboard LED OFF (HIGH is OFF for Blue Pill PC13)
+      case MODE_LED_OFF:
+        // Turn LED OFF (HIGH is OFF for Blue Pill PC13)
         LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
+        break;
+      case MODE_LED_ON:
+        // Turn LED ON (LOW is ON for Blue Pill PC13)
+        LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+        break;
+      case MODE_BLINK_SLOW:
+        LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
+        LL_mDelay(600);
+        break;
+      case MODE_BLINK_FAST:
+        LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
+        LL_mDelay(150);
+        break;
+      default:
+        // Emergency fallback: if something goes wrong, reset to mode 0
+        currentMode = MODE_LED_OFF;
+        break;
     }
-    // NO DELAY: The loop spins at maximum speed to instantly update the LED
-    */
 
     /* USER CODE END WHILE */
 
