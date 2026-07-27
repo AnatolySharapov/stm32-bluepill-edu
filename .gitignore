@@ -1,0 +1,25 @@
+# ==============================================================================
+# PROJECT      : stm32-bluepill-edu / 01_blink_ll
+# PLATFORM     : STM32F103C8T6 (Blue Pill)
+# IDE          : STM32CubeIDE (GCC Compiler)
+# DESCRIPTION  : Standard Git ignore rules to block compiler artifacts,
+#                temporary IDE logs, and hardware-specific map files.
+# ==============================================================================
+
+# Git batches
+Git/
+
+# Compilation outputs
+Debug/
+Release/
+bin/
+obj/
+
+# IDE internal files (not needed for project reconstruction)
+*.su
+*.txt
+*.map
+
+# OS files
+.DS_Store
+Thumbs.db
