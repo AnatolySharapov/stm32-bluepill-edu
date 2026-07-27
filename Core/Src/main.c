@@ -71,7 +71,12 @@ __IO uint32_t bounceCounter = 0U; // Counter for physical bounces
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+
 /* USER CODE BEGIN PFP */
+// Private Function Prototypes
+
+uint8_t Process_Button(void);
+void Update_LED_Behavior(uint8_t mode);
 
 /* USER CODE END PFP */
 
@@ -154,71 +159,23 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-  // Variables to track state and count bounces
-  // Local variable to store the previous state of the button
-  // uint8_t lastState = 1U; // Button is High (1) by default due to pull-up
-
-  // Variable to store the current active mode
   uint8_t currentMode = MODE_LED_OFF;
 
   while (1)
   {
-    // Read the current immediate raw state of the button
-    // uint8_t currentState = LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN);
-
-    // Check if the button is physically pressed right now (LOW state)
-    if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+    // 1. Ask our function if a click happened
+    if (Process_Button() == 1U)
     {
-      // Introduce a delay to wait out the mechanical bouncing/sparking
-      LL_mDelay(20);
+      currentMode++;
 
-      // Double-check if the pin is STILL pressed after 20ms
-      if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+      if (currentMode >= TOTAL_MODES)
       {
-
-        // Button press is confirmed! Switch to the next mode
-        currentMode++;
-
-        // If we exceed the maximum modes, wrap around back to 0
-        if (currentMode >= TOTAL_MODES)
-        {
-          currentMode = MODE_LED_OFF;
-        }
-
-        // Wait until the user completely releases the wire/button
-        while (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
-        {
-          __NOP();
-        }
-        LL_mDelay(20); // Wait out the release bounce
+        currentMode = MODE_LED_OFF;
       }
     }
 
-    /* 2. NEW C CONCEPT: SWITCH-CASE MENU */
-    switch (currentMode)
-    {
-      case MODE_LED_OFF:
-        // Turn LED OFF (HIGH is OFF for Blue Pill PC13)
-        LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
-        break;
-      case MODE_LED_ON:
-        // Turn LED ON (LOW is ON for Blue Pill PC13)
-        LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
-        break;
-      case MODE_BLINK_SLOW:
-        LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
-        LL_mDelay(600);
-        break;
-      case MODE_BLINK_FAST:
-        LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
-        LL_mDelay(150);
-        break;
-      default:
-        // Emergency fallback: if something goes wrong, reset to mode 0
-        currentMode = MODE_LED_OFF;
-        break;
-    }
+    // 2. Pass the mode variable as an argument to the second function
+    Update_LED_Behavior(currentMode);
 
     /* USER CODE END WHILE */
 
@@ -287,6 +244,65 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/* USER CODE BEGIN 4 */
+/** 
+
+* @brief  Reads the button with debounce and waits for release.
+* @retval 1 if a true button click occurred, 0 otherwise.
+*/
+uint8_t Process_Button(void)
+{
+  if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+  {
+    LL_mDelay(20); // Debounce delay
+    if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+    {
+      // Wait until the user releases the button
+      while (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+      {
+        __NOP();
+      }
+      LL_mDelay(20); // Release debounce delay
+      return 1U;     // Valid click confirmed!
+    }
+  }
+  return 0U; // No valid click
+}
+
+/** 
+
+* @brief  Executes the LED pattern based on the current mode.
+* @param  mode: The active LED operation mode.
+* @retval None
+*/
+void Update_LED_Behavior(uint8_t mode)
+{
+  switch (mode)
+  {
+    case MODE_LED_OFF:
+      LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
+      break;
+
+    case MODE_LED_ON:
+      LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+      break;
+
+    case MODE_BLINK_SLOW:
+      LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
+      LL_mDelay(600);
+      break;
+
+    case MODE_BLINK_FAST:
+      LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
+      LL_mDelay(150);
+      break;
+
+    default:
+      break;
+  }
+}
+/* USER CODE END 4 */
 
 /* USER CODE END 4 */
 
