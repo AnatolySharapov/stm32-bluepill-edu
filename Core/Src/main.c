@@ -245,7 +245,9 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-/* USER CODE BEGIN 4 */
+// File-scope static variable (hidden from main.c but visible to functions below)
+static uint8_t fastModeIntroPlayed = 0U;
+
 /** 
 
 * @brief  Reads the button with debounce and waits for release.
@@ -270,18 +272,14 @@ uint8_t Process_Button(void)
   return 0U; // No valid click
 }
 
-/** 
-
-* @brief  Executes the LED pattern based on the current mode.
-* @param  mode: The active LED operation mode.
-* @retval None
-*/
 void Update_LED_Behavior(uint8_t mode)
 {
   switch (mode)
   {
     case MODE_LED_OFF:
       LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
+      // Reset the intro flag for the next cycle
+      fastModeIntroPlayed = 0U;
       break;
 
     case MODE_LED_ON:
@@ -294,6 +292,20 @@ void Update_LED_Behavior(uint8_t mode)
       break;
 
     case MODE_BLINK_FAST:
+      // Check if we need to play the intro strobe
+      if (fastModeIntroPlayed == 0U)
+      {
+        // Loop repeats exactly 5 times
+        for (uint8_t i = 0U; i < 5U; i++)
+      {
+        LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
+        LL_mDelay(40);
+        LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
+        LL_mDelay(40);
+      }
+        fastModeIntroPlayed = 1U; // Lock the intro
+      }
+      // Regular continuous blinking
       LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
       LL_mDelay(150);
       break;
@@ -301,7 +313,10 @@ void Update_LED_Behavior(uint8_t mode)
     default:
       break;
   }
+
 }
+/* USER CODE END 4 */
+
 /* USER CODE END 4 */
 
 /* USER CODE END 4 */
