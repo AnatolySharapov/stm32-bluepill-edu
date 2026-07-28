@@ -38,9 +38,8 @@
 // Definitions for our 4 LED modes
 #define MODE_LED_OFF            0U
 #define MODE_LED_ON             1U
-#define MODE_BLINK_SOS          2U
-#define MODE_BLINK_FAST         3U
-
+#define MODE_SOS                2U
+#define MODE_HEARTBIT           3U
 #define TOTAL_MODES             4U
 /* USER CODE END PD */
 
@@ -53,13 +52,17 @@
 
 /* USER CODE BEGIN PV */
 
-__IO uint32_t bounceCounter = 0U; // Counter for physical bounces
 __IO uint8_t myData = 55U;        // A standard test variable
 __IO uint8_t *myDataPointer = NULL;  // A pointer variable (initialized to NULL / address 0)
+
+// 1. Define global static arrays for patterns (Stored in flash memory due to const)
+static const uint16_t sosPattern[] = {150U, 150U, 150U, 500U, 500U, 500U, 150U, 150U, 150U};
+static const uint16_t heartBeatPattern[] = {100U, 200U, 100U, 800U}; // New cool pattern!
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 
@@ -68,6 +71,9 @@ static void MX_GPIO_Init(void);
 
 uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
+
+// New function that takes a pointer to an array and its length
+void Play_Light_Pattern(const uint16_t *patternArray, uint8_t length);
 
 /* USER CODE END PFP */
 
@@ -158,13 +164,15 @@ int main(void)
     // 2. Pass the mode variable as an argument to the second function
     Update_LED_Behavior(currentMode);
 
+    // 3. FIX FOR USB DRIVER: Give the CPU and Debugger a 1ms break
+    LL_mDelay(1);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
   }
 
-  LL_mDelay(1);
   /* USER CODE END 3 */
 }
 
@@ -228,9 +236,6 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-// File-scope static variable (hidden from main.c but visible to functions below)
-static uint8_t fastModeIntroPlayed = 0U;
-
 /** 
 
 * @brief  Reads the button with debounce and waits for release.
@@ -259,72 +264,52 @@ void Update_LED_Behavior(uint8_t mode)
 {
   switch (mode)
   {
-    case MODE_LED_OFF:
-      LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
-      // Reset the intro flag for the next cycle
-      fastModeIntroPlayed = 0U;
-      break;
+  case MODE_LED_OFF:
+    LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
+    break;
 
-    case MODE_LED_ON:
-      LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
-      break;
+  case MODE_LED_ON:
+    LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+    break;
 
-    case MODE_BLINK_SOS:
-      {
-      // 1. Array storing time intervals for the SOS Morse pattern (in milliseconds)
-      // 150ms = Dot, 500ms = Dash, 200ms = Pause between components
-      // Total of 9 flashes (3 dots, 3 dashes, 3 dots)
-      static const uint16_t sosPattern[9] = {150U, 150U, 150U, 500U, 500U, 500U, 150U, 150U, 150U};
+  case MODE_SOS:
+    // Pass the array name (acts as pointer) and its exact size (9)
+    Play_Light_Pattern(sosPattern, 9U);
+    LL_mDelay(1500); // Long break between SOS blocks
+    break;
 
-      // 2. Loop through each of the 9 elements of the array
-      for (uint8_t i = 0U; i < 9U; i++)
-      {
-        // Extra safety: double-check if the mode was changed while running the loop
-        if (mode != MODE_BLINK_SOS)
-        {
-          break;
-        }
+  case MODE_HEARTBIT:
+    // Reuse the exact same function with a totally different array!
+    Play_Light_Pattern(heartBeatPattern, 4U);
+    break;
 
-        LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
-        LL_mDelay(sosPattern[i]);                      // Read delay value from the array element 'i'
-
-        LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
-        LL_mDelay(200);                                // Fixed pause between flashes
-      }
-
-      // Long 1.5-second pause before repeating the entire SOS signal
-      LL_mDelay(1500);
-
-      }
-      break;
-
-    case MODE_BLINK_FAST:
-      // Check if we need to play the intro strobe
-      if (fastModeIntroPlayed == 0U)
-      {
-        // Loop repeats exactly 5 times
-        for (uint8_t i = 0U; i < 5U; i++)
-        {
-          LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
-          LL_mDelay(40);
-          LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
-          LL_mDelay(40);
-        }
-        fastModeIntroPlayed = 1U; // Lock the intro
-      }
-      // Regular continuous blinking
-      LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
-      LL_mDelay(150);
-      break;
-
-    default:
-      break;
+  default:
+    break;
   }
-
 }
-/* USER CODE END 4 */
 
-/* USER CODE END 4 */
+/** 
+
+* @brief  Plays a variable-length light pattern using pointers.
+* @param  patternArray: Pointer to the first element of the array.
+* @param  length: Number of elements in the array.
+* @retval None
+*/
+void Play_Light_Pattern(const uint16_t *patternArray, uint8_t length)
+{
+  // Loop through the array using the passed length
+  for (uint8_t i = 0U; i < length; i++)
+  {
+    LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON 
+
+    /* MAGIC OF POINTERS: accessing array elements via pointer index */
+    LL_mDelay(*(patternArray + i));                // Read value by shifting the address pointer
+
+    LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
+    LL_mDelay(200);                                // Fixed gap between flashes
+
+  }
+}
 
 /* USER CODE END 4 */
 
