@@ -21,12 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-/*
-	#include (Preprocessor): The lines at the very top include external files
-	(headers/libraries).
-	Without them, the compiler will not know what LL_GPIO_TogglePin means.
-	This is the foundation of modularity in C.
-*/
+#include <stddef.h>           // Defines NULL pointer macro
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,9 +42,6 @@
 #define MODE_BLINK_FAST         3U
 
 #define TOTAL_MODES             4U
-
-// #define LED_BLINK_FAST_MS    100U
-// #define LED_BLINK_SLOW_MS    600U
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -61,10 +53,9 @@
 
 /* USER CODE BEGIN PV */
 
-// Global variable for debug
-// Global variable for Live Expressions tracking
-// Global variables are easy to track in Live Expressions
 __IO uint32_t bounceCounter = 0U; // Counter for physical bounces
+__IO uint8_t myData = 55U;        // A standard test variable
+__IO uint8_t *myDataPointer = NULL;  // A pointer variable (initialized to NULL / address 0)
 
 /* USER CODE END PV */
 
@@ -83,24 +74,6 @@ void Update_LED_Behavior(uint8_t mode);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-/*
-	Data Types (uint32_t):
-    Notice the uint32_t nCount variable.
-    Embedded C requires strict memory management.
-    This is an unsigned (u), integer (int), strictly 32-bit (32) number.
-    Avoid using the standard, generic int for now — in microcontroller development,
-    you should always use fixed-width types from the stdint.h library.
-*/
-
-/*
-  The __IO Modifier (or volatile):
-    The __IO macro stands before the data type in the delay function (in pure C,
-    this maps to the volatile keyword).
-    It prevents the compiler from optimizing away (deleting) the "empty" delay loop.
-    Without it, the compiler would assume: "This loop does nothing useful, let's remove it."
-    If removed, the LED would blink at a frequency of millions of Hertz,
-    making it look like it is permanently turned on.
-*/
 
 /* USER CODE END 0 */
 
@@ -157,6 +130,14 @@ int main(void)
 
   /* USER CODE END 2 */
 
+  LL_SYSTICK_EnableIT();
+
+  // Assign the physical memory address of 'myData' to our pointer
+  myDataPointer = &myData;
+
+  // (keep your existing button initialization code below)
+  /* USER CODE END 2 */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   uint8_t currentMode = MODE_LED_OFF;
@@ -182,6 +163,8 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
   }
+
+  LL_mDelay(1);
   /* USER CODE END 3 */
 }
 
