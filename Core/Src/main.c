@@ -43,7 +43,7 @@
 // Definitions for our 4 LED modes
 #define MODE_LED_OFF            0U
 #define MODE_LED_ON             1U
-#define MODE_BLINK_SLOW         2U
+#define MODE_BLINK_SOS          2U
 #define MODE_BLINK_FAST         3U
 
 #define TOTAL_MODES             4U
@@ -286,9 +286,33 @@ void Update_LED_Behavior(uint8_t mode)
       LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
       break;
 
-    case MODE_BLINK_SLOW:
-      LL_GPIO_TogglePin(GPIOC, LL_GPIO_PIN_13);
-      LL_mDelay(600);
+    case MODE_BLINK_SOS:
+      {
+      // 1. Array storing time intervals for the SOS Morse pattern (in milliseconds)
+      // 150ms = Dot, 500ms = Dash, 200ms = Pause between components
+      // Total of 9 flashes (3 dots, 3 dashes, 3 dots)
+      static const uint16_t sosPattern[9] = {150U, 150U, 150U, 500U, 500U, 500U, 150U, 150U, 150U};
+
+      // 2. Loop through each of the 9 elements of the array
+      for (uint8_t i = 0U; i < 9U; i++)
+      {
+        // Extra safety: double-check if the mode was changed while running the loop
+        if (mode != MODE_BLINK_SOS)
+        {
+          break;
+        }
+
+        LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
+        LL_mDelay(sosPattern[i]);                      // Read delay value from the array element 'i'
+
+        LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
+        LL_mDelay(200);                                // Fixed pause between flashes
+      }
+
+      // Long 1.5-second pause before repeating the entire SOS signal
+      LL_mDelay(1500);
+
+      }
       break;
 
     case MODE_BLINK_FAST:
@@ -297,12 +321,12 @@ void Update_LED_Behavior(uint8_t mode)
       {
         // Loop repeats exactly 5 times
         for (uint8_t i = 0U; i < 5U; i++)
-      {
-        LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
-        LL_mDelay(40);
-        LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
-        LL_mDelay(40);
-      }
+        {
+          LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON
+          LL_mDelay(40);
+          LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
+          LL_mDelay(40);
+        }
         fastModeIntroPlayed = 1U; // Lock the intro
       }
       // Regular continuous blinking
