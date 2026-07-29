@@ -41,6 +41,15 @@
 #define MODE_SOS                2U
 #define MODE_HEARTBIT           3U
 #define TOTAL_MODES             4U
+
+// Define a structure to group all LED-related hardware parameters
+typedef struct
+{
+  GPIO_TypeDef *port;   // Pointer to the GPIO Port (e.g., GPIOC)
+  uint32_t pin;         // Specific GPIO Pin mask (e.g., LL_GPIO_PIN_13)
+  uint8_t isActiveLow;  // 1 if LED turns ON when pin is LOW (like Blue Pill)
+} LED_TypeDef;
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,7 +66,15 @@ __IO uint8_t *myDataPointer = NULL;  // A pointer variable (initialized to NULL 
 
 // 1. Define global static arrays for patterns (Stored in flash memory due to const)
 static const uint16_t sosPattern[] = {150U, 150U, 150U, 500U, 500U, 500U, 150U, 150U, 150U};
-static const uint16_t heartBeatPattern[] = {100U, 200U, 100U, 800U}; // New cool pattern!
+static const uint16_t heartBeatPattern[] = {100U, 200U, 100U, 800U};
+
+// Create and initialize our onboard LED object using the new structure type
+static const LED_TypeDef onboardLED =
+{
+    .port = GPIOC, // FIX: Added braces to satisfy GCC compiler rules
+    .pin = LL_GPIO_PIN_13, // FIX: Added braces to satisfy GCC compiler rules
+    .isActiveLow = 1U // Blue Pill onboard LED turns ON on LOW state
+};
 
 /* USER CODE END PV */
 
@@ -72,8 +89,9 @@ static void MX_GPIO_Init(void);
 uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
 
-// New function that takes a pointer to an array and its length
-void Play_Light_Pattern(const uint16_t *patternArray, uint8_t length);
+// Now function accepts a pointer to our LED configuration and a pattern
+void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length);
+
 
 /* USER CODE END PFP */
 
@@ -265,22 +283,22 @@ void Update_LED_Behavior(uint8_t mode)
   switch (mode)
   {
   case MODE_LED_OFF:
-    LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);
+    // Use structure directly if we want
+    LL_GPIO_SetOutputPin(onboardLED.port, onboardLED.pin);
     break;
 
   case MODE_LED_ON:
-    LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+    LL_GPIO_ResetOutputPin(onboardLED.port, onboardLED.pin);
     break;
 
   case MODE_SOS:
-    // Pass the array name (acts as pointer) and its exact size (9)
-    Play_Light_Pattern(sosPattern, 9U);
-    LL_mDelay(1500); // Long break between SOS blocks
+    // Pass the address of our structure (&onboardLED)
+    Play_Light_Pattern(&onboardLED, sosPattern, 9U);
+    LL_mDelay(1500);
     break;
 
   case MODE_HEARTBIT:
-    // Reuse the exact same function with a totally different array!
-    Play_Light_Pattern(heartBeatPattern, 4U);
+    Play_Light_Pattern(&onboardLED, heartBeatPattern, 4U);
     break;
 
   default:
@@ -290,23 +308,32 @@ void Update_LED_Behavior(uint8_t mode)
 
 /** 
 
-* @brief  Plays a variable-length light pattern using pointers.
-* @param  patternArray: Pointer to the first element of the array.
+* @brief  Plays a light pattern on a specific LED defined by a structure pointer.
+* @param  led: Pointer to the LED structural configuration.
+* @param  patternArray: Pointer to the intervals array.
 * @param  length: Number of elements in the array.
-* @retval None
 */
-void Play_Light_Pattern(const uint16_t *patternArray, uint8_t length)
+void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length)
 {
-  // Loop through the array using the passed length
   for (uint8_t i = 0U; i < length; i++)
   {
-    LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13); // LED ON 
+    // Dynamic ON control based on structure data
+    if (led->isActiveLow == 1U) {
+    LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is ON
+  } else {
+    LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is ON
+  }
 
-    /* MAGIC OF POINTERS: accessing array elements via pointer index */
-    LL_mDelay(*(patternArray + i));                // Read value by shifting the address pointer
+  LL_mDelay(*(patternArray + i));
 
-    LL_GPIO_SetOutputPin(GPIOC, LL_GPIO_PIN_13);   // LED OFF
-    LL_mDelay(200);                                // Fixed gap between flashes
+  // Dynamic OFF control based on structure data
+  if (led->isActiveLow == 1U) {
+    LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is OFF
+  } else {
+    LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is OFF
+  }
+
+  LL_mDelay(200);
 
   }
 }
