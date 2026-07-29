@@ -200,5 +200,34 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
+// Link to the global variable defined in main.c
+extern __IO uint8_t currentMode;
+
+/** 
+
+* @brief  This function handles EXTI Line 10 to 15 interrupts (Triggers on PB12 press).
+*/
+void EXTI15_10_IRQHandler(void)
+{
+  // 1. Check if the interrupt was actually triggered by EXTI Line 12
+  if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_12) != RESET)
+  {
+    // 2. Clear the interrupt pending flag (CRITICAL! Otherwise it will trigger forever)
+    LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_12);
+
+    // 3. Simple software debounce inside interrupt (Wait 20ms and check again)
+    LL_mDelay(20);
+    if (LL_GPIO_IsInputPinSet(GPIOB, LL_GPIO_PIN_12) == 0U)
+    {
+      // 4. Advance the mode
+      currentMode++;
+      if (currentMode >= 4U) // TOTAL_MODES = 4
+      {
+        currentMode = 0U; // MODE_LED_OFF = 0
+      }
+    }
+  }
+}
+/* USER CODE END 1 */
 
 /* USER CODE END 1 */

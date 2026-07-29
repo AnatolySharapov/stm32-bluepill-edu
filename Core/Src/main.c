@@ -61,6 +61,9 @@ typedef struct
 
 /* USER CODE BEGIN PV */
 
+// Volatile tells compiler that this variable changes outside the main workflow (in ISR)
+__IO uint8_t currentMode = MODE_LED_OFF;
+
 __IO uint8_t myData = 55U;        // A standard test variable
 __IO uint8_t *myDataPointer = NULL;  // A pointer variable (initialized to NULL / address 0)
 
@@ -145,12 +148,32 @@ int main(void)
   /* Enable SysTick exception (interrupt) */
   LL_SYSTICK_EnableIT();
 
-  /* Enable GPIOB clock for the button */
-  LL_APB2_GRP1_EnableClock(BUTTON_CLK_PERIPH);
+  /* 1. Enable Clocks for GPIOB and AFIO (AFIO is required for EXTI mapping on F1 series) */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
 
-  /* Configure PB12 pin as Input with Pull-up resistor */
+  /* 2. Configure PB12 pin as Input with Pull-up resistor */
   LL_GPIO_SetPinMode(BUTTON_PORT, BUTTON_PIN, LL_GPIO_MODE_INPUT);
   LL_GPIO_SetPinPull(BUTTON_PORT, BUTTON_PIN, LL_GPIO_PULL_UP);
+
+  /* 3. Map EXTI Line 12 to GPIOB Port (Connects PB12 to EXTI12 controller) */
+  LL_GPIO_AF_SetEXTISource(LL_GPIO_AF_EXTI_PORTB, LL_GPIO_AF_EXTI_LINE12);
+
+  /* 4. Configure EXTI Line 12 to trigger on Falling Edge (Pressing pulls to GND / 0) */
+  /* 4. Configure EXTI Line 12 using initialization structure */
+    LL_EXTI_InitTypeDef EXTI_InitStruct;
+
+  EXTI_InitStruct.Line_0_31   = LL_EXTI_LINE_12;
+  EXTI_InitStruct.LineCommand = ENABLE;
+  EXTI_InitStruct.Mode        = LL_EXTI_MODE_IT;
+  EXTI_InitStruct.Trigger     = LL_EXTI_TRIGGER_FALLING;
+
+  LL_EXTI_Init(&EXTI_InitStruct); // Pass the pointer to structure
+
+  /* 5. Enable EXTI Line 12 Interrupt in NVIC controller */
+  // Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15)
+  NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
+  NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE END 2 */
 
@@ -164,25 +187,14 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t currentMode = MODE_LED_OFF;
 
   while (1)
   {
-    // 1. Ask our function if a click happened
-    if (Process_Button() == 1U)
-    {
-      currentMode++;
-
-      if (currentMode >= TOTAL_MODES)
-      {
-        currentMode = MODE_LED_OFF;
-      }
-    }
-
-    // 2. Pass the mode variable as an argument to the second function
+    // The main loop only cares about playing the pattern of the current mode.
+    // The variable 'currentMode' will be updated completely asynchronously inside the ISR!
     Update_LED_Behavior(currentMode);
 
-    // 3. FIX FOR USB DRIVER: Give the CPU and Debugger a 1ms break
+    // 1ms breath time to prevent debugger and Windows from hanging
     LL_mDelay(1);
 
     /* USER CODE END WHILE */
