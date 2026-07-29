@@ -93,7 +93,7 @@ uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
 
 // Now function accepts a pointer to our LED configuration and a pattern
-void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length);
+void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length, uint8_t currentPatternMode);
 
 
 /* USER CODE END PFP */
@@ -305,12 +305,12 @@ void Update_LED_Behavior(uint8_t mode)
 
   case MODE_SOS:
     // Pass the address of our structure (&onboardLED)
-    Play_Light_Pattern(&onboardLED, sosPattern, 9U);
+    Play_Light_Pattern(&onboardLED, sosPattern, 9U, MODE_SOS);
     LL_mDelay(1500);
     break;
 
   case MODE_HEARTBIT:
-    Play_Light_Pattern(&onboardLED, heartBeatPattern, 4U);
+    Play_Light_Pattern(&onboardLED, heartBeatPattern, 4U, MODE_HEARTBIT);
     break;
 
   default:
@@ -325,27 +325,43 @@ void Update_LED_Behavior(uint8_t mode)
 * @param  patternArray: Pointer to the intervals array.
 * @param  length: Number of elements in the array.
 */
-void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length)
+void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length, uint8_t currentPatternMode)
 {
   for (uint8_t i = 0U; i < length; i++)
   {
+    /* 1. CRITICAL CHECK: If the global mode changed asynchronously in the interrupt,
+    instantly break the loop and exit the function right now! */
+
+    if (currentMode != currentPatternMode)
+    {
+      break;
+    }
+
     // Dynamic ON control based on structure data
-    if (led->isActiveLow == 1U) {
-    LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is ON
-  } else {
-    LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is ON
-  }
+    if (led->isActiveLow == 1U)
+    {
+      LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is ON
+    } else {
+      LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is ON
+    }
 
-  LL_mDelay(*(patternArray + i));
+    LL_mDelay(*(patternArray + i));
 
-  // Dynamic OFF control based on structure data
-  if (led->isActiveLow == 1U) {
-    LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is OFF
-  } else {
-    LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is OFF
-  }
+    // Dynamic OFF control based on structure data
+    if (led->isActiveLow == 1U)
+    {
+      LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is OFF
+    } else {
+      LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is OFF
+    }
 
-  LL_mDelay(200);
+    /* 2. SECOND CHECK: verify again before entering the next delay */
+    if (currentMode != currentPatternMode)
+    {
+        break;
+    }
+
+    LL_mDelay(200);
 
   }
 }
