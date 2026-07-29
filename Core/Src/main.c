@@ -21,7 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stddef.h>           // Defines NULL pointer macro
+#include <stddef.h>              // Defines NULL pointer macro
+#include "stm32f1xx_ll_usart.h"  // FIX: Adds USART_InitTypeDef and UART functions
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -82,12 +84,13 @@ static const LED_TypeDef onboardLED =
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 // Private Function Prototypes
+
+void UART_Send_String(const char *str);
 
 uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
@@ -127,7 +130,8 @@ int main(void)
   /* SysTick_IRQn interrupt configuration */
   NVIC_SetPriority(SysTick_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),15, 0));
 
-  /* NOJTAG: JTAG-DP Disabled and SW-DP Enabled */
+  /** NOJTAG: JTAG-DP Disabled and SW-DP Enabled
+  */
   LL_GPIO_AF_Remap_SWJ_NOJTAG();
 
   /* USER CODE BEGIN Init */
@@ -143,10 +147,34 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* Enable SysTick exception (interrupt) */
   LL_SYSTICK_EnableIT();
+
+  /* 1. Enable Peripheral Clocks for GPIOA and USART1 */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+
+  /* 2. Configure PA9 as Alternate Function Push-Pull (TX pin) */
+  LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_9, LL_GPIO_MODE_ALTERNATE);
+  LL_GPIO_SetPinSpeed(GPIOA, LL_GPIO_PIN_9, LL_GPIO_SPEED_FREQ_HIGH);
+  LL_GPIO_SetPinOutputType(GPIOA, LL_GPIO_PIN_9, LL_GPIO_OUTPUT_PUSHPULL);
+
+  /* 3. Configure USART1 Hardware Parameters */
+  // We assume default 8MHz or 72MHz clock. LL_USART_Init calculates the baudrate automatically.
+  LL_USART_InitTypeDef USART_InitStruct;
+  USART_InitStruct.BaudRate            = 115200U;                  // Speed: 115200 bits per second
+  USART_InitStruct.DataWidth           = LL_USART_DATAWIDTH_8B;    // 8 bits of data
+  USART_InitStruct.StopBits            = LL_USART_STOPBITS_1;      // 1 stop bit
+  USART_InitStruct.Parity              = LL_USART_PARITY_NONE;     // No parity checking
+  USART_InitStruct.TransferDirection   = LL_USART_DIRECTION_TX_RX; // Enable both Transmit and Receive
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;  // No flow control
+  LL_USART_Init(USART1, &USART_InitStruct);
+
+  /* 4. Enable USART1 Peripheral */
+  LL_USART_Enable(USART1);
 
   /* 1. Enable Clocks for GPIOB and AFIO (AFIO is required for EXTI mapping on F1 series) */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
@@ -161,7 +189,7 @@ int main(void)
 
   /* 4. Configure EXTI Line 12 to trigger on Falling Edge (Pressing pulls to GND / 0) */
   /* 4. Configure EXTI Line 12 using initialization structure */
-    LL_EXTI_InitTypeDef EXTI_InitStruct;
+  LL_EXTI_InitTypeDef EXTI_InitStruct;
 
   EXTI_InitStruct.Line_0_31   = LL_EXTI_LINE_12;
   EXTI_InitStruct.LineCommand = ENABLE;
@@ -175,14 +203,6 @@ int main(void)
   NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
   NVIC_EnableIRQ(EXTI15_10_IRQn);
 
-  /* USER CODE END 2 */
-
-  LL_SYSTICK_EnableIT();
-
-  // Assign the physical memory address of 'myData' to our pointer
-  myDataPointer = &myData;
-
-  // (keep your existing button initialization code below)
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -239,15 +259,83 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  LL_USART_InitTypeDef USART_InitStruct = {0};
+
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* Peripheral clock enable */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+  /**USART1 GPIO Configuration
+  PA9   ------> USART1_TX
+  PA10   ------> USART1_RX
+  */
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_9;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_10;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_FLOATING;
+  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  USART_InitStruct.BaudRate = 115200;
+  USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
+  USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
+  USART_InitStruct.Parity = LL_USART_PARITY_NONE;
+  USART_InitStruct.TransferDirection = LL_USART_DIRECTION_TX_RX;
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;
+  USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
+  LL_USART_Init(USART1, &USART_InitStruct);
+  LL_USART_ConfigAsyncMode(USART1);
+  LL_USART_Enable(USART1);
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
   */
 static void MX_GPIO_Init(void)
 {
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+
+  /**/
+  LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+
+  /**/
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_13;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -363,6 +451,31 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
 
     LL_mDelay(200);
 
+  }
+}
+
+/** 
+
+* @brief  Sends a null-terminated string over USART1 using pointers.
+* @param  str: Pointer to the character array (string).
+* @retval None
+*/
+void UART_Send_String(const char *str)
+{
+  // Loop runs until the pointer hits the '\0' null-terminator byte
+  while (*str != '\0')
+  {
+    // 1. Wait until the Transmit Data Register is empty (ready to accept next byte)
+    while (LL_USART_IsActiveFlag_TXE(USART1) == 0U)
+    {
+      __NOP(); // Wait
+    }
+
+    // 2. Transmit the current single character by dereferencing the pointer
+    LL_USART_TransmitData8(USART1, *str);
+
+    // 3. Move the pointer to the next character in memory (Pointer arithmetic)
+    str++;
   }
 }
 

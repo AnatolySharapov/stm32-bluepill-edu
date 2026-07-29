@@ -18,10 +18,16 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
+#include "main.h"
+#include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "main.h"
 #include "stm32f1xx_ll_utils.h"
+
+// FIX: Declare the function prototype so stm32f1xx_it.c knows it exists
+void UART_Send_String(const char *str);
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -172,7 +178,6 @@ void PendSV_Handler(void)
   /* USER CODE BEGIN PendSV_IRQn 0 */
 
   /* USER CODE END PendSV_IRQn 0 */
-
   /* USER CODE BEGIN PendSV_IRQn 1 */
 
   /* USER CODE END PendSV_IRQn 1 */
@@ -225,9 +230,18 @@ void EXTI15_10_IRQHandler(void)
       {
         currentMode = 0U; // MODE_LED_OFF = 0
       }
+
+      // Add text notifications based on the new mode
+      switch (currentMode)
+      {
+        case 0U: UART_Send_String("Mode Changed: LED OFF\r\n");   break;
+        case 1U: UART_Send_String("Mode Changed: LED ON\r\n");    break;
+        case 2U: UART_Send_String("Mode Changed: SOS MORSE\r\n"); break;
+        case 3U: UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
+        default: break;
+      }
+
     }
   }
 }
-/* USER CODE END 1 */
-
 /* USER CODE END 1 */
