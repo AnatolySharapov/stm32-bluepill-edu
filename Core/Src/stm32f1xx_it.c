@@ -48,6 +48,9 @@ void UART_Send_String(const char *str);
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 
+extern __IO uint8_t currentMode; // Your existing variable
+static __IO uint32_t last_press_time = 0; // Timestamp of the last valid button press
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -63,6 +66,9 @@ void UART_Send_String(const char *str);
 /* External variables --------------------------------------------------------*/
 
 /* USER CODE BEGIN EV */
+
+extern volatile uint32_t ms_ticks;
+uint32_t LL_GetTick(void); // Prototype of the tick getter function
 
 /* USER CODE END EV */
 
@@ -189,7 +195,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-
+  ms_ticks++; // Increment the global millisecond counter every 1 ms
   /* USER CODE END SysTick_IRQn 0 */
 
   /* USER CODE BEGIN SysTick_IRQn 1 */
@@ -214,33 +220,37 @@ extern __IO uint8_t currentMode;
 */
 void EXTI15_10_IRQHandler(void)
 {
-  // 1. Check if the interrupt was actually triggered by EXTI Line 12
+  // 1. Check if the interrupt was actually triggered by EXTI Line 12 (PB12)
   if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_12) != RESET)
   {
-    // 2. Clear the interrupt pending flag (CRITICAL! Otherwise it will trigger forever)
+    // 2. Clear the interrupt pending flag IMMEDIATELY to avoid infinite looping
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_12);
 
-    // 3. Simple software debounce inside interrupt (Wait 20ms and check again)
-    LL_mDelay(20);
-    if (LL_GPIO_IsInputPinSet(GPIOB, LL_GPIO_PIN_12) == 0U)
+    // 3. Get the current system uptime in milliseconds from SysTick
+    uint32_t current_time = LL_GetTick();
+
+    // 4. Software debounce: check if 500 ms have passed since the last valid press
+    if ((current_time - last_press_time) > 500)
     {
-      // 4. Advance the mode
+      // If 200 ms passed, it is a valid button press, not a contact bounce
+      last_press_time = current_time; // Save the timestamp of the current valid press
+
+      // 5. Advance to the next operation mode
       currentMode++;
-      if (currentMode >= 4U) // TOTAL_MODES = 4
+      if (currentMode >= TOTAL_MODES)
       {
-        currentMode = 0U; // MODE_LED_OFF = 0
+        currentMode = MODE_LED_OFF;
       }
 
-      // Add text notifications based on the new mode
+      // 6. Transmit the current status log via USART
       switch (currentMode)
       {
-        case 0U: UART_Send_String("Mode Changed: LED OFF\r\n");   break;
-        case 1U: UART_Send_String("Mode Changed: LED ON\r\n");    break;
-        case 2U: UART_Send_String("Mode Changed: SOS MORSE\r\n"); break;
-        case 3U: UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
+        case MODE_LED_OFF:      UART_Send_String("Mode Changed: LED OFF\r\n");   break;
+        case MODE_LED_ON:       UART_Send_String("Mode Changed: LED ON\r\n");    break;
+        case MODE_LED_SOS:      UART_Send_String("Mode Changed: SOS \r\n");      break;
+        case MODE_LED_HEARTBIT: UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
         default: break;
       }
-
     }
   }
 }

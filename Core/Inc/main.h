@@ -87,6 +87,13 @@ void Error_Handler(void);
 
 void Delay(__IO uint32_t);
 
+// Definitions for our 4 LED modes
+#define MODE_LED_OFF            0U
+#define MODE_LED_ON             1U
+#define MODE_LED_SOS            2U
+#define MODE_LED_HEARTBIT       3U
+#define TOTAL_MODES             4U
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

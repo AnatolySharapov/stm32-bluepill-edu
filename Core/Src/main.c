@@ -21,6 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stddef.h>              // Defines NULL pointer macro
 #include "stm32f1xx_ll_usart.h"  // FIX: Adds USART_InitTypeDef and UART functions
 
@@ -37,20 +40,13 @@
 #define BUTTON_PIN              LL_GPIO_PIN_12
 #define BUTTON_CLK_PERIPH       LL_APB2_GRP1_PERIPH_GPIOB
 
-// Definitions for our 4 LED modes
-#define MODE_LED_OFF            0U
-#define MODE_LED_ON             1U
-#define MODE_SOS                2U
-#define MODE_HEARTBIT           3U
-#define TOTAL_MODES             4U
-
 // Define a structure to group all LED-related hardware parameters
-typedef struct
-{
+typedef struct {
   GPIO_TypeDef *port;   // Pointer to the GPIO Port (e.g., GPIOC)
   uint32_t pin;         // Specific GPIO Pin mask (e.g., LL_GPIO_PIN_13)
   uint8_t isActiveLow;  // 1 if LED turns ON when pin is LOW (like Blue Pill)
 } LED_TypeDef;
+
 
 /* USER CODE END PD */
 
@@ -64,46 +60,53 @@ typedef struct
 /* USER CODE BEGIN PV */
 
 // Volatile tells compiler that this variable changes outside the main workflow (in ISR)
-__IO uint8_t currentMode = MODE_LED_OFF;
-
-__IO uint8_t myData = 55U;        // A standard test variable
-__IO uint8_t *myDataPointer = NULL;  // A pointer variable (initialized to NULL / address 0)
+// __IO (volatile) is mandatory because this variable is modified inside an ISR
+__IO uint8_t currentMode = MODE_LED_OFF; // Current operational mode controlled by EXTI
+__IO uint8_t myData = 55U;               // A standard test variable
+__IO uint8_t *myDataPointer = NULL;      // A pointer variable (initialized to NULL / address 0)
 
 // 1. Define global static arrays for patterns (Stored in flash memory due to const)
+// Flash-resident patterns to save RAM
 static const uint16_t sosPattern[] = {150U, 150U, 150U, 500U, 500U, 500U, 150U, 150U, 150U};
 static const uint16_t heartBeatPattern[] = {100U, 200U, 100U, 800U};
 
 // Create and initialize our onboard LED object using the new structure type
 static const LED_TypeDef onboardLED =
 {
-    .port = GPIOC, // FIX: Added braces to satisfy GCC compiler rules
-    .pin = LL_GPIO_PIN_13, // FIX: Added braces to satisfy GCC compiler rules
-    .isActiveLow = 1U // Blue Pill onboard LED turns ON on LOW state
+  .port = GPIOC, // FIX: Added braces to satisfy GCC compiler rules
+  .pin = LL_GPIO_PIN_13, // FIX: Added braces to satisfy GCC compiler rules
+  .isActiveLow = 1U // Blue Pill onboard LED turns ON on LOW state
 };
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+/* USER CODE BEGIN PFP */
+// Private Function Prototypes
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
-/* USER CODE BEGIN PFP */
-// Private Function Prototypes
 
+// STM32 peripheral function prototypes
+uint32_t LL_GetTick(void);
 void UART_Send_String(const char *str);
-
 uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
 
 // Now function accepts a pointer to our LED configuration and a pattern
 void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length, uint8_t currentPatternMode);
 
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+volatile uint32_t ms_ticks = 0; // Global millisecond counter
+
+uint32_t LL_GetTick(void)
+{
+  return ms_ticks;
+}
 
 /* USER CODE END 0 */
 
@@ -145,7 +148,7 @@ int main(void)
 
   /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
+  // Initialize all configured peripherals (including the EXTI button and LED GPIOs)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
@@ -203,6 +206,8 @@ int main(void)
   NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
   NVIC_EnableIRQ(EXTI15_10_IRQn);
 
+  UART_Send_String("STM32CubeIDE 01_blink_ll has started\r\n");
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -210,6 +215,13 @@ int main(void)
 
   while (1)
   {
+
+    /*
+    * Asynchronous Main Execution Path
+    * The main loop remains entirely non-blocking.
+    * We pass currentMode, which dynamically changes via the EXTI interrupt.
+    */
+
     // The main loop only cares about playing the pattern of the current mode.
     // The variable 'currentMode' will be updated completely asynchronously inside the ISR!
     Update_LED_Behavior(currentMode);
@@ -380,29 +392,31 @@ uint8_t Process_Button(void)
 
 void Update_LED_Behavior(uint8_t mode)
 {
+
   switch (mode)
   {
-  case MODE_LED_OFF:
-    // Use structure directly if we want
-    LL_GPIO_SetOutputPin(onboardLED.port, onboardLED.pin);
-    break;
+    case MODE_LED_OFF: /* Mode 0: LED OFF */
+      // High level turns off Active LOW LED
+      LL_GPIO_SetOutputPin(onboardLED.port, onboardLED.pin);
+      break;
 
-  case MODE_LED_ON:
-    LL_GPIO_ResetOutputPin(onboardLED.port, onboardLED.pin);
-    break;
+    case MODE_LED_ON: /* Mode 1: LED ON */
+      // Low level turns on Active LOW LED
+      LL_GPIO_ResetOutputPin(onboardLED.port, onboardLED.pin);
+      break;
 
-  case MODE_SOS:
-    // Pass the address of our structure (&onboardLED)
-    Play_Light_Pattern(&onboardLED, sosPattern, 9U, MODE_SOS);
-    LL_mDelay(1500);
-    break;
+    case MODE_LED_SOS: /* Mode 2: SOS Morse Code (. . . - - - . . .) */
+      Play_Light_Pattern(&onboardLED, sosPattern, sizeof(sosPattern)/sizeof(sosPattern[0]), currentMode);
+      break;
 
-  case MODE_HEARTBIT:
-    Play_Light_Pattern(&onboardLED, heartBeatPattern, 4U, MODE_HEARTBIT);
-    break;
+    case MODE_LED_HEARTBIT:
+      Play_Light_Pattern(&onboardLED, heartBeatPattern, sizeof(heartBeatPattern)/sizeof(heartBeatPattern[0]), currentMode);
+      break;
 
-  default:
-    break;
+    default:
+      // Safe-state: Turn off processing when MODE_LED_OFF is selected
+      Play_Light_Pattern(&onboardLED, NULL, 0, MODE_LED_OFF);
+      break;
   }
 }
 
@@ -415,42 +429,73 @@ void Update_LED_Behavior(uint8_t mode)
 */
 void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length, uint8_t currentPatternMode)
 {
-  for (uint8_t i = 0U; i < length; i++)
+
+  // Persist timing and step state between sequential function calls
+  static uint32_t last_led_update = 0;
+  static uint8_t pattern_step = 0U;
+
+  // Tracks the operation mode from the PREVIOUS function execution
+  static uint8_t last_mode = 0U;
+
+  // 1. OPERATION MODE CHANGE DETECTION
+  if (currentPatternMode != last_mode)
   {
-    /* 1. CRITICAL CHECK: If the global mode changed asynchronously in the interrupt,
-    instantly break the loop and exit the function right now! */
 
-    if (currentMode != currentPatternMode)
-    {
-      break;
+      // Buffer where the string will be written (allocated with extra safety margin)
+      char tx_buffer[64];
+      // Format the string: %d specifies a signed decimal integer
+      snprintf(tx_buffer, sizeof(tx_buffer), "@Play_Light_Pattern : length  = %d\r\n", length);
+      // Transmit the formatted string over UART
+      UART_Send_String(tx_buffer);
+
+      // Format the string: %d specifies a signed decimal integer
+      snprintf(tx_buffer, sizeof(tx_buffer), "@Play_Light_Pattern : currentPatternMode  = %d\r\n", currentPatternMode);
+      // Transmit the formatted string over UART
+      UART_Send_String(tx_buffer);
+
+      pattern_step = 0U;              // Reset step index to the beginning of the new pattern
+      last_led_update = LL_GetTick(); // Reset time reference to the current tick
+      last_mode = currentPatternMode; // Update the tracking variable with the new mode
+
+      // Optional: Turn off the LED during transition to start with a clean state
+      // High level turns off Active LOW LED
+      LL_GPIO_SetOutputPin(led->port, led->pin);
+  }
+
+  // Immediately exit if the system is configured to "Off"
+  if (currentPatternMode == MODE_LED_OFF) {
+      return;
+  }
+
+  // Safe-check: Guard against null pointers or uninitialized zero-length arrays
+  if (patternArray == NULL || length == 0U) {
+      return;
+  }
+
+  // 2. BOUNDARY SANITY CHECK
+  if (pattern_step >= (length * 2)) {
+      pattern_step = 0U; // Loop the pattern seamlessly back to the start
+  }
+
+  // 3. NON-BLOCKING ASYNCHRONOUS TIMER (Replaces the traditional for-loop)
+  // The uint32_t subtraction correctly handles LL_GetTick rollover every 49.7 days
+  // 3. CORRECT ASYNCHRONOUS TIMER
+  // Extract the time interval: for steps 0 and 1 it uses element, for 2 and 3 — element [1]
+  uint16_t current_interval = patternArray[pattern_step / 2];
+
+  if ((LL_GetTick() - last_led_update) >= current_interval)
+  {
+    last_led_update = LL_GetTick(); // Reset the timer
+    // State management instead of Toggle
+    // If the step is even (0, 2, 4...) -> TURN ON the LED
+    if (pattern_step % 2 == 0) {
+      LL_GPIO_ResetOutputPin(led->port, led->pin); // Low = ON for Active LOW
     }
-
-    // Dynamic ON control based on structure data
-    if (led->isActiveLow == 1U)
-    {
-      LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is ON
-    } else {
-      LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is ON
+    // If the step is odd (1, 3, 5...) -> TURN OFF the LED
+    else {
+      LL_GPIO_SetOutputPin(led->port, led->pin); // High = OFF for Active LOW
     }
-
-    LL_mDelay(*(patternArray + i));
-
-    // Dynamic OFF control based on structure data
-    if (led->isActiveLow == 1U)
-    {
-      LL_GPIO_SetOutputPin(led->port, led->pin);   // HIGH is OFF
-    } else {
-      LL_GPIO_ResetOutputPin(led->port, led->pin); // LOW is OFF
-    }
-
-    /* 2. SECOND CHECK: verify again before entering the next delay */
-    if (currentMode != currentPatternMode)
-    {
-        break;
-    }
-
-    LL_mDelay(200);
-
+    pattern_step++; // Move to the next step of the phase
   }
 }
 
