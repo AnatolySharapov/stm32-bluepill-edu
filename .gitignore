@@ -1,19 +1,33 @@
-# ==============================================================================
-# PROJECT      : stm32-bluepill-edu / 01_blink_ll
-# PLATFORM     : STM32F103C8T6 (Blue Pill)
+
+# ==========================================
+# File name    : .gitignore
+# File purpose : STM32CubeIDE / Eclipse Git Ignore File
+# Project      : stm32-bluepill-edu / 01_blink_ll
+# Target       : STM32 Microcontrollers (ARM Cortex-M)
+# Platform     : STM32F103C8T6 (Blue Pill)
 # IDE          : STM32CubeIDE (GCC Compiler)
-# DESCRIPTION  : Standard Git ignore rules to block compiler artifacts,
-#                temporary IDE logs, and hardware-specific map files.
-# ==============================================================================
+# Generated    : C/C++ Projects
+# Description  : Standard Git ignore rules to block compiler artifacts,
+#               temporary IDE logs, and hardware-specific map files.
+# Date         : 01.08.2026
+# ==========================================
 
 # Git batches
 Git/
 
-# Compilation outputs
+# Compiled files and build directories
 Debug/
 Release/
 bin/
 obj/
+
+# Compiler temporary files
+*.o
+*.su
+*.d
+
+# IDE log files
+*.log
 
 # IDE internal files (not needed for project reconstruction)
 *.su
@@ -23,3 +37,14 @@ obj/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Debug configuration files (uncomment if each developer uses custom settings)
+# *.launch
+
+# Eclipse / STM32CubeIDE temporary files
+.metadata/
+.recommenders/
+
+# Optional: Local project settings
+# (Uncomment if team members use different operating systems or compiler paths)
+# .settings/
