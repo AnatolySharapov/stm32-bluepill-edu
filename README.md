@@ -14,6 +14,14 @@ The project is intended as a minimal, clean starting point for learning STM32 de
 - Ready for Debug and Release builds
 - Git-friendly project structure
 
+### 📌 Project Status & Roadmap
+
+* [x] **Project Setup:** Clean structure with automated build scripts.
+* [x] **GPIO:** Basic LED blinking and push-button handling using Low-Layer (LL) drivers.
+* [x] **USART:** Basic data exchange via USART1 interface.
+* [ ] **Timers / PWM:** *(Planned)*
+* [ ] **ADC / DAC:** *(Planned)*
+
 ## Hardware
 
 - Board: STM32 Blue Pill

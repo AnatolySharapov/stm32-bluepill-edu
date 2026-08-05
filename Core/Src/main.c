@@ -153,60 +153,8 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  /* Enable SysTick exception (interrupt) */
   LL_SYSTICK_EnableIT();
-
-  /* 1. Enable Peripheral Clocks for GPIOA and USART1 */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
-
-  /* 2. Configure PA9 as Alternate Function Push-Pull (TX pin) */
-  LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_9, LL_GPIO_MODE_ALTERNATE);
-  LL_GPIO_SetPinSpeed(GPIOA, LL_GPIO_PIN_9, LL_GPIO_SPEED_FREQ_HIGH);
-  LL_GPIO_SetPinOutputType(GPIOA, LL_GPIO_PIN_9, LL_GPIO_OUTPUT_PUSHPULL);
-
-  /* 3. Configure USART1 Hardware Parameters */
-  // We assume default 8MHz or 72MHz clock. LL_USART_Init calculates the baudrate automatically.
-  LL_USART_InitTypeDef USART_InitStruct;
-  USART_InitStruct.BaudRate            = 115200U;                  // Speed: 115200 bits per second
-  USART_InitStruct.DataWidth           = LL_USART_DATAWIDTH_8B;    // 8 bits of data
-  USART_InitStruct.StopBits            = LL_USART_STOPBITS_1;      // 1 stop bit
-  USART_InitStruct.Parity              = LL_USART_PARITY_NONE;     // No parity checking
-  USART_InitStruct.TransferDirection   = LL_USART_DIRECTION_TX_RX; // Enable both Transmit and Receive
-  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;  // No flow control
-  LL_USART_Init(USART1, &USART_InitStruct);
-
-  /* 4. Enable USART1 Peripheral */
-  LL_USART_Enable(USART1);
-
-  /* 1. Enable Clocks for GPIOB and AFIO (AFIO is required for EXTI mapping on F1 series) */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
-
-  /* 2. Configure PB12 pin as Input with Pull-up resistor */
-  LL_GPIO_SetPinMode(BUTTON_PORT, BUTTON_PIN, LL_GPIO_MODE_INPUT);
-  LL_GPIO_SetPinPull(BUTTON_PORT, BUTTON_PIN, LL_GPIO_PULL_UP);
-
-  /* 3. Map EXTI Line 12 to GPIOB Port (Connects PB12 to EXTI12 controller) */
-  LL_GPIO_AF_SetEXTISource(LL_GPIO_AF_EXTI_PORTB, LL_GPIO_AF_EXTI_LINE12);
-
-  /* 4. Configure EXTI Line 12 to trigger on Falling Edge (Pressing pulls to GND / 0) */
-  /* 4. Configure EXTI Line 12 using initialization structure */
-  LL_EXTI_InitTypeDef EXTI_InitStruct;
-
-  EXTI_InitStruct.Line_0_31   = LL_EXTI_LINE_12;
-  EXTI_InitStruct.LineCommand = ENABLE;
-  EXTI_InitStruct.Mode        = LL_EXTI_MODE_IT;
-  EXTI_InitStruct.Trigger     = LL_EXTI_TRIGGER_FALLING;
-
-  LL_EXTI_Init(&EXTI_InitStruct); // Pass the pointer to structure
-
-  /* 5. Enable EXTI Line 12 Interrupt in NVIC controller */
-  // Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15)
-  NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
-  NVIC_EnableIRQ(EXTI15_10_IRQn);
-
-  UART_Send_String("STM32CubeIDE 01_blink_ll has started\r\n");
+  UART_Send_String("STM32CubeIDE stm32-bluepill-edu has started\r\n");
 
   /* USER CODE END 2 */
 
@@ -283,7 +231,6 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE END USART1_Init 0 */
 
   LL_USART_InitTypeDef USART_InitStruct = {0};
-
   LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* Peripheral clock enable */
@@ -354,41 +301,63 @@ static void MX_GPIO_Init(void)
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
+  
+  /* 1. Enable Clocks for AFIO (AFIO is required for EXTI mapping on F1 series) */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
 
   LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
   LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_13, LL_GPIO_MODE_OUTPUT);
 
-  LL_GPIO_SetPinMode(GPIOB, LL_GPIO_PIN_12, LL_GPIO_MODE_INPUT);
-  LL_GPIO_SetPinPull(GPIOB, LL_GPIO_PIN_12, LL_GPIO_PULL_UP);
+  /* 2. Configure PB12 pin as Input with Pull-up resistor */
+  LL_GPIO_SetPinMode(BUTTON_PORT, BUTTON_PIN, LL_GPIO_MODE_INPUT);
+  LL_GPIO_SetPinPull(BUTTON_PORT, BUTTON_PIN, LL_GPIO_PULL_UP);
+
+  /* 1. Enable Peripheral Clocks for GPIOA and USART1 */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+
+  /* 2. Configure PA9 as Alternate Function Push-Pull (TX pin) */
+  LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_9, LL_GPIO_MODE_ALTERNATE);
+  LL_GPIO_SetPinSpeed(GPIOA, LL_GPIO_PIN_9, LL_GPIO_SPEED_FREQ_HIGH);
+  LL_GPIO_SetPinOutputType(GPIOA, LL_GPIO_PIN_9, LL_GPIO_OUTPUT_PUSHPULL);
+
+  /* 3. Configure USART1 Hardware Parameters */
+  // We assume default 8MHz or 72MHz clock. LL_USART_Init calculates the baudrate automatically.
+  LL_USART_InitTypeDef USART_InitStruct;
+  USART_InitStruct.BaudRate            = 115200U;                  // Speed: 115200 bits per second
+  USART_InitStruct.DataWidth           = LL_USART_DATAWIDTH_8B;    // 8 bits of data
+  USART_InitStruct.StopBits            = LL_USART_STOPBITS_1;      // 1 stop bit
+  USART_InitStruct.Parity              = LL_USART_PARITY_NONE;     // No parity checking
+  USART_InitStruct.TransferDirection   = LL_USART_DIRECTION_TX_RX; // Enable both Transmit and Receive
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;  // No flow control
+  LL_USART_Init(USART1, &USART_InitStruct);
+
+  /* 4. Enable USART1 Peripheral */
+  LL_USART_Enable(USART1);
+
+  /* 3. Map EXTI Line 12 to GPIOB Port (Connects PB12 to EXTI12 controller) */
+  LL_GPIO_AF_SetEXTISource(LL_GPIO_AF_EXTI_PORTB, LL_GPIO_AF_EXTI_LINE12);
+
+  /* 4. Configure EXTI Line 12 to trigger on Falling Edge (Pressing pulls to GND / 0) */
+  /* 4. Configure EXTI Line 12 using initialization structure */
+  LL_EXTI_InitTypeDef EXTI_InitStruct;
+
+  EXTI_InitStruct.Line_0_31   = LL_EXTI_LINE_12;
+  EXTI_InitStruct.LineCommand = ENABLE;
+  EXTI_InitStruct.Mode        = LL_EXTI_MODE_IT;
+  EXTI_InitStruct.Trigger     = LL_EXTI_TRIGGER_FALLING;
+
+  LL_EXTI_Init(&EXTI_InitStruct); // Pass the pointer to structure
+
+  /* 5. Enable EXTI Line 12 Interrupt in NVIC controller */
+  // Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15)
+  NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
+  NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
-
-/** 
-
-* @brief  Reads the button with debounce and waits for release.
-* @retval 1 if a true button click occurred, 0 otherwise.
-*/
-uint8_t Process_Button(void)
-{
-  if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
-  {
-    LL_mDelay(20); // Debounce delay
-    if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
-    {
-      // Wait until the user releases the button
-      while (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
-      {
-        __NOP();
-      }
-      LL_mDelay(20); // Release debounce delay
-      return 1U;     // Valid click confirmed!
-    }
-  }
-  return 0U; // No valid click
-}
 
 void Update_LED_Behavior(uint8_t mode)
 {

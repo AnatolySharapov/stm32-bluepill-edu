@@ -220,22 +220,26 @@ extern __IO uint8_t currentMode;
 */
 void EXTI15_10_IRQHandler(void)
 {
-  // 1. Check if the interrupt was actually triggered by EXTI Line 12 (PB12)
+
+  // USER CODE BEGIN EXTI15_10_IRQn 0 */
+  static uint32_t last_press_time = 0;
+
+  // Check if the interrupt was actually triggered by EXTI Line 12 (PB12)
   if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_12) != RESET)
   {
-    // 2. Clear the interrupt pending flag IMMEDIATELY to avoid infinite looping
+
+    // Clear the interrupt pending flag IMMEDIATELY to avoid infinite looping
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_12);
 
-    // 3. Get the current system uptime in milliseconds from SysTick
+    // Get the current system uptime in milliseconds from SysTick
     uint32_t current_time = LL_GetTick();
 
-    // 4. Software debounce: check if 500 ms have passed since the last valid press
+    // Software debounce: check if 500 ms have passed since the last valid press
     if ((current_time - last_press_time) > 500)
     {
-      // If 200 ms passed, it is a valid button press, not a contact bounce
-      last_press_time = current_time; // Save the timestamp of the current valid press
+      // If 500 ms passed, it is a valid button press, not a contact bounce
 
-      // 5. Advance to the next operation mode
+      //  Advance to the next operation mode
       currentMode++;
       if (currentMode >= TOTAL_MODES)
       {
@@ -251,7 +255,11 @@ void EXTI15_10_IRQHandler(void)
         case MODE_LED_HEARTBIT: UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
         default: break;
       }
+
+      last_press_time = current_time; // Save the timestamp of the current valid press
+
     }
   }
+  /* USER CODE END EXTI15_10_IRQn 0 */
 }
 /* USER CODE END 1 */
