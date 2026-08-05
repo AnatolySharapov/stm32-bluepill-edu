@@ -9,7 +9,7 @@
 # Generated    : C/C++ Projects
 # Description  : Standard Git ignore rules to block compiler artifacts,
 #               temporary IDE logs, and hardware-specific map files.
-# Date         : 01.08.2026
+# Date         : 04.08.2026
 # ==========================================
 
 # Git batches
@@ -29,17 +29,24 @@ obj/
 # IDE log files
 *.log
 
-# IDE internal files (not needed for project reconstruction)
-*.su
-*.txt
+# IDE internal files 
+# (not needed for project reconstruction)
 *.map
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Debug configuration files (uncomment if each developer uses custom settings)
+# Debug configuration files 
+# (uncomment if each developer uses custom settings)
 # *.launch
+
+# Generated build artifacts
+*.elf
+*.hex
+*.bin
+*.list
+*.siz
 
 # Eclipse / STM32CubeIDE temporary files
 .metadata/
