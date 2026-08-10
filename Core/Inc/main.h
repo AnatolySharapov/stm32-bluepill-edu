@@ -91,8 +91,11 @@ void Delay(__IO uint32_t);
 #define MODE_LED_OFF            0U
 #define MODE_LED_ON             1U
 #define MODE_LED_SOS            2U
-#define MODE_LED_HEARTBIT       3U
-#define TOTAL_MODES             4U
+#define MODE_LED_HTB            3U  // HeartBit
+#define TOTAL_MODES             3U
+
+/* Size of the USART receive buffer */
+#define RX_BUF_SIZE             32
 
 /* USER CODE END Private defines */
 

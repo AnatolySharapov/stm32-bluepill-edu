@@ -1,7 +1,7 @@
 @echo off
 
 rem ===================================================================
-rem Script Name   : stm32cubeidec_cleanBuild_Release.bat
+rem Script Name   : stm32cubeidec_clean_bild_release.bat
 rem                 STM32CubeIDE headless Release build batch file
 rem
 rem Description   : Automatically detects the STM32CubeIDE project,
@@ -19,11 +19,12 @@ rem Repository    : https://github.com
 rem License       : MIT
 rem
 rem Date Created  : August 4, 2026
-rem Last Modified : August 4, 2026
-rem Version       : 2.1.0
+rem Last Modified : August 7, 2026
+rem Version       : 2.2.0
 rem
 rem Change History:
 rem -------------------------------------------------------------------
+rem Version 2.2.0 | Aug 7, 2026 | Corrected project path.
 rem Version 2.1.0 | Aug 4, 2026 | Switched to unique temporary workspace.
 rem                             | Automatic workspace cleanup.
 rem                             | Added workspace creation validation.
@@ -44,18 +45,16 @@ set "HEADER=1"
 set "SEP=0"
 
 for /f "usebackq delims=" %%L in ("%~f0") do (
-    if defined HEADER (
-        echo %%L
-
-        if "%%L"=="rem ===================================================================" (
-            set /a SEP+=1
-            if !SEP! EQU 2 set "HEADER="
-        )
+  if defined HEADER (
+    echo %%L
+    if "%%L"=="rem ===================================================================" (
+      set /a SEP+=1
+      if !SEP! EQU 2 set "HEADER="
     )
+  )
 )
 
 echo.
-
 echo %~n0 started at %TIME% %DATE%
 echo.
 
@@ -74,22 +73,22 @@ set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 
 if exist "%SCRIPT_DIR%\.project" (
-    set "PROJECT_DIR=%SCRIPT_DIR%"
+  set "PROJECT_DIR=%SCRIPT_DIR%"
 ) else (
-    if exist "%SCRIPT_DIR%\..\.project" (
-        for %%I in ("%SCRIPT_DIR%\..") do set "PROJECT_DIR=%%~fI"
-    )
+  if exist "%SCRIPT_DIR%\..\..\..\.project" (
+    for %%I in ("%SCRIPT_DIR%\..\..\..") do set "PROJECT_DIR=%%~fI"
+  )  
 )
 
 if not defined PROJECT_DIR (
-    echo ERROR: STM32CubeIDE project not found.
-    echo.
-    echo Expected:
-    echo    %SCRIPT_DIR%\.project
-    echo or
-    echo    %SCRIPT_DIR%\..\.project
-    pause
-    exit /b 2
+  echo ERROR: STM32CubeIDE project not found.
+  echo.
+  echo Expected:
+  echo    %SCRIPT_DIR%\.project
+  echo or
+  echo    %SCRIPT_DIR%\..\..\..\.project
+  pause
+  exit /b 2
 )
 
 echo PROJECT_DIR   = "%PROJECT_DIR%"

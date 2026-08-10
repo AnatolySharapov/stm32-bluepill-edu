@@ -22,8 +22,8 @@
 #include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "main.h"
 #include "stm32f1xx_ll_utils.h"
+#include "stm32f1xx_ll_exti.h"
 
 // FIX: Declare the function prototype so stm32f1xx_it.c knows it exists
 void UART_Send_String(const char *str);
@@ -50,6 +50,12 @@ void UART_Send_String(const char *str);
 
 extern __IO uint8_t currentMode; // Your existing variable
 static __IO uint32_t last_press_time = 0; // Timestamp of the last valid button press
+
+/* USART RX buffer definitions */
+volatile char rx_buffer[RX_BUF_SIZE];
+volatile uint8_t rx_index = 0;
+
+volatile uint8_t command_ready = 0; // Flag: 1 means the command line is fully received
 
 /* USER CODE END PV */
 
@@ -216,13 +222,62 @@ extern __IO uint8_t currentMode;
 
 /** 
 
+* @brief This function handles USART1 global interrupt.
+*/
+void USART1_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART1_IRQn 0 */
+
+  /* Check if the RXNE interrupt flag is active and interrupt generation is enabled */
+  if (LL_USART_IsActiveFlag_RXNE(USART1) && LL_USART_IsEnabledIT_RXNE(USART1))
+  {
+    /* Reading the data register automatically clears the RXNE flag */
+    char received_char = (char)LL_USART_ReceiveData8(USART1);
+
+    /* Echo feature: send the received character back to the transmitter host */
+    while (!LL_USART_IsActiveFlag_TXE(USART1));
+    LL_USART_TransmitData8(USART1, received_char);
+
+    /* Process characters only if the previous command has been evaluated in main */
+    if (command_ready == 0)
+    {
+      /* Check if the received character is a valid command terminator */
+      if (received_char == '\n' || received_char == '\r')
+      {
+      if (rx_index > 0) /* Ensure the buffer actually contains command letters */
+      {
+        rx_buffer[rx_index] = '\0'; /* Terminate the string safely */
+        command_ready = 1;          /* Notify the main loop that data is ready */
+      }
+      }
+      else
+      {
+        /* Ignore any unexpected leading control characters (like extra \r or \n) */
+        if (received_char >= 32 && received_char <= 126)
+        {
+          if (rx_index < (RX_BUF_SIZE - 1))
+          {
+            rx_buffer[rx_index++] = received_char;
+          }
+          else
+          {
+            rx_index = 0; /* Reset index on buffer overflow constraint */
+          }
+        }
+      }
+    }
+  }
+  /* USER CODE END USART1_IRQn 0 */
+}
+
+/** 
+
 * @brief  This function handles EXTI Line 10 to 15 interrupts (Triggers on PB12 press).
 */
 void EXTI15_10_IRQHandler(void)
 {
 
   // USER CODE BEGIN EXTI15_10_IRQn 0 */
-  static uint32_t last_press_time = 0;
 
   // Check if the interrupt was actually triggered by EXTI Line 12 (PB12)
   if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_12) != RESET)
@@ -241,7 +296,7 @@ void EXTI15_10_IRQHandler(void)
 
       //  Advance to the next operation mode
       currentMode++;
-      if (currentMode >= TOTAL_MODES)
+      if (currentMode > TOTAL_MODES)
       {
         currentMode = MODE_LED_OFF;
       }
@@ -249,10 +304,10 @@ void EXTI15_10_IRQHandler(void)
       // 6. Transmit the current status log via USART
       switch (currentMode)
       {
-        case MODE_LED_OFF:      UART_Send_String("Mode Changed: LED OFF\r\n");   break;
-        case MODE_LED_ON:       UART_Send_String("Mode Changed: LED ON\r\n");    break;
-        case MODE_LED_SOS:      UART_Send_String("Mode Changed: SOS \r\n");      break;
-        case MODE_LED_HEARTBIT: UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
+        case MODE_LED_OFF:  UART_Send_String("Mode Changed: LED OFF\r\n");   break;
+        case MODE_LED_ON:   UART_Send_String("Mode Changed: LED ON\r\n");    break;
+        case MODE_LED_SOS:  UART_Send_String("Mode Changed: SOS \r\n");      break;
+        case MODE_LED_HTB:  UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
         default: break;
       }
 

@@ -21,13 +21,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stddef.h>              // Defines NULL pointer macro
 #include "stm32f1xx_ll_usart.h"  // FIX: Adds USART_InitTypeDef and UART functions
-#include <string.h>              // Required for strcmp function operations
 
 /* USER CODE END Includes */
 
@@ -49,6 +47,7 @@ typedef struct {
   uint8_t isActiveLow;  // 1 if LED turns ON when pin is LOW (like Blue Pill)
 } LED_TypeDef;
 
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -68,13 +67,7 @@ __IO uint8_t *myDataPointer = NULL;      // A pointer variable (initialized to N
 
 // 1. Define global static arrays for patterns (Stored in flash memory due to const)
 // Flash-resident patterns to save RAM
-
-static const uint16_t sosPattern[] = {
-  150U, 150U, 150U, 150U, 150U, 500U, // Три точки и паузы (буква S)
-  500U, 150U, 500U, 150U, 500U, 500U, // Три тире и паузы (буква O)
-  150U, 150U, 150U, 150U, 150U, 800U  // Три точки и финальная пауза перед повтором (буква S)
-};
-
+static const uint16_t sosPattern[] = {150U, 150U, 150U, 500U, 500U, 500U, 150U, 150U, 150U};
 static const uint16_t heartBeatPattern[] = {100U, 200U, 100U, 800U};
 
 // Create and initialize our onboard LED object using the new structure type
@@ -84,10 +77,6 @@ static const LED_TypeDef onboardLED =
   .pin = LL_GPIO_PIN_13, // FIX: Added braces to satisfy GCC compiler rules
   .isActiveLow = 1U // Blue Pill onboard LED turns ON on LOW state
 };
-
-extern volatile char rx_buffer[];
-extern volatile uint8_t rx_index;
-extern volatile uint8_t command_ready;
 
 /* USER CODE END PV */
 
@@ -162,15 +151,62 @@ int main(void)
   // Initialize all configured peripherals (including the EXTI button and LED GPIOs)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
-
   /* USER CODE BEGIN 2 */
 
+  /* Enable SysTick exception (interrupt) */
   LL_SYSTICK_EnableIT();
 
-  /* Enable USART1 Receive Data Register Not Empty interrupt */
-  LL_USART_EnableIT_RXNE(USART1);
+  /* 1. Enable Peripheral Clocks for GPIOA and USART1 */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
 
-  UART_Send_String("STM32CubeIDE stm32-bluepill-edu has started\r\n");
+  /* 2. Configure PA9 as Alternate Function Push-Pull (TX pin) */
+  LL_GPIO_SetPinMode(GPIOA, LL_GPIO_PIN_9, LL_GPIO_MODE_ALTERNATE);
+  LL_GPIO_SetPinSpeed(GPIOA, LL_GPIO_PIN_9, LL_GPIO_SPEED_FREQ_HIGH);
+  LL_GPIO_SetPinOutputType(GPIOA, LL_GPIO_PIN_9, LL_GPIO_OUTPUT_PUSHPULL);
+
+  /* 3. Configure USART1 Hardware Parameters */
+  // We assume default 8MHz or 72MHz clock. LL_USART_Init calculates the baudrate automatically.
+  LL_USART_InitTypeDef USART_InitStruct;
+  USART_InitStruct.BaudRate            = 115200U;                  // Speed: 115200 bits per second
+  USART_InitStruct.DataWidth           = LL_USART_DATAWIDTH_8B;    // 8 bits of data
+  USART_InitStruct.StopBits            = LL_USART_STOPBITS_1;      // 1 stop bit
+  USART_InitStruct.Parity              = LL_USART_PARITY_NONE;     // No parity checking
+  USART_InitStruct.TransferDirection   = LL_USART_DIRECTION_TX_RX; // Enable both Transmit and Receive
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;  // No flow control
+  LL_USART_Init(USART1, &USART_InitStruct);
+
+  /* 4. Enable USART1 Peripheral */
+  LL_USART_Enable(USART1);
+
+  /* 1. Enable Clocks for GPIOB and AFIO (AFIO is required for EXTI mapping on F1 series) */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
+
+  /* 2. Configure PB12 pin as Input with Pull-up resistor */
+  LL_GPIO_SetPinMode(BUTTON_PORT, BUTTON_PIN, LL_GPIO_MODE_INPUT);
+  LL_GPIO_SetPinPull(BUTTON_PORT, BUTTON_PIN, LL_GPIO_PULL_UP);
+
+  /* 3. Map EXTI Line 12 to GPIOB Port (Connects PB12 to EXTI12 controller) */
+  LL_GPIO_AF_SetEXTISource(LL_GPIO_AF_EXTI_PORTB, LL_GPIO_AF_EXTI_LINE12);
+
+  /* 4. Configure EXTI Line 12 to trigger on Falling Edge (Pressing pulls to GND / 0) */
+  /* 4. Configure EXTI Line 12 using initialization structure */
+  LL_EXTI_InitTypeDef EXTI_InitStruct;
+
+  EXTI_InitStruct.Line_0_31   = LL_EXTI_LINE_12;
+  EXTI_InitStruct.LineCommand = ENABLE;
+  EXTI_InitStruct.Mode        = LL_EXTI_MODE_IT;
+  EXTI_InitStruct.Trigger     = LL_EXTI_TRIGGER_FALLING;
+
+  LL_EXTI_Init(&EXTI_InitStruct); // Pass the pointer to structure
+
+  /* 5. Enable EXTI Line 12 Interrupt in NVIC controller */
+  // Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15)
+  NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
+  NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+  UART_Send_String("STM32CubeIDE 01_blink_ll has started\r\n");
 
   /* USER CODE END 2 */
 
@@ -179,56 +215,26 @@ int main(void)
 
   while (1)
   {
-    /* Handle asynchronous non-blocking LED state execution path */
+
+    /*
+    * Asynchronous Main Execution Path
+    * The main loop remains entirely non-blocking.
+    * We pass currentMode, which dynamically changes via the EXTI interrupt.
+    */
+
+    // The main loop only cares about playing the pattern of the current mode.
+    // The variable 'currentMode' will be updated completely asynchronously inside the ISR!
     Update_LED_Behavior(currentMode);
 
-    /* Check if a complete command line packet was flagged via the ISR */
-    if (command_ready)
-    {
-      command_ready = 0;
-
-      /* Parse and evaluate the validated text string token */
-      if (strcmp((const char*)rx_buffer, "OFF") == 0)
-      {
-        currentMode = MODE_LED_OFF;
-        UART_Send_String("\r\n-> Executed: LED turned OFF\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "ON") == 0)
-      {
-        currentMode = MODE_LED_ON;
-        UART_Send_String("\r\n-> Executed: LED turned ON\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "SOS") == 0)
-      {
-        currentMode = MODE_LED_SOS;
-        UART_Send_String("\r\n-> Executed: Mode SOS activated\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "HB") == 0)
-      {
-        currentMode = MODE_LED_HTB;
-        UART_Send_String("\r\n-> Executed: Mode HeartBit activated\r\n");
-      }
-      else
-      {
-        UART_Send_String("\r\n-> Error: Unknown command packet string!\r\n");
-      }
-
-      __disable_irq();
-
-      /* CRITICAL: Safely flush the buffer memory before enabling the next packet reception */
-      memset((void*)rx_buffer, 0, RX_BUF_SIZE);
-      rx_index = 0;
-
-      __enable_irq();
-
-    }
-
-    /* 1ms breath time to prevent debug locking issues */
+    // 1ms breath time to prevent debugger and Windows from hanging
     LL_mDelay(1);
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+
   }
 
-  /* USER CODE END WHILE */
-  /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
 }
 
@@ -274,62 +280,44 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE BEGIN USART1_Init 0 */
 
+  /* USER CODE END USART1_Init 0 */
+
+  LL_USART_InitTypeDef USART_InitStruct = {0};
+
   LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* Peripheral clock enable */
-
-  /* 1. Enable Peripheral Clocks for GPIOA and USART1 */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
-
-  /* USER CODE END USART1_Init 0 */
-
-  /* USER CODE BEGIN USART1_Init 1 */
-
   /**USART1 GPIO Configuration
   PA9   ------> USART1_TX
   PA10   ------> USART1_RX
   */
-
-  GPIO_InitStruct.Pin         = LL_GPIO_PIN_9;
-  GPIO_InitStruct.Mode        = LL_GPIO_MODE_ALTERNATE;
-  GPIO_InitStruct.Speed       = LL_GPIO_SPEED_FREQ_HIGH;
-  GPIO_InitStruct.OutputType  = LL_GPIO_OUTPUT_PUSHPULL;
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_9;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   GPIO_InitStruct.Pin = LL_GPIO_PIN_10;
-  GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;       // Configure PA10 as Input
-  LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_10, LL_GPIO_PULL_UP); // Enable Pull-up resistor
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_FLOATING;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /* USER CODE BEGIN USART1_Init 1 */
+
   /* USER CODE END USART1_Init 1 */
-
-  /* USER CODE BEGIN USART1_Init 2 */
-
-  /* Configure USART1 Hardware Parameters */
-  // We assume default 8MHz or 72MHz clock.
-  // LL_USART_Init calculates the baudrate automatically.
-  LL_USART_InitTypeDef USART_InitStruct = {0};
-  USART_InitStruct.BaudRate            = 115200U;                  // Speed: 115200 bits per second
-  USART_InitStruct.DataWidth           = LL_USART_DATAWIDTH_8B;    // 8 bits of data
-  USART_InitStruct.StopBits            = LL_USART_STOPBITS_1;      // 1 stop bit
-  USART_InitStruct.Parity              = LL_USART_PARITY_NONE;     // No parity checking
-  USART_InitStruct.TransferDirection   = LL_USART_DIRECTION_TX_RX; // Enable both Transmit and Receive
-  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;  // No flow control
-  USART_InitStruct.OverSampling        = LL_USART_OVERSAMPLING_16;
+  USART_InitStruct.BaudRate = 115200;
+  USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
+  USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
+  USART_InitStruct.Parity = LL_USART_PARITY_NONE;
+  USART_InitStruct.TransferDirection = LL_USART_DIRECTION_TX_RX;
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;
+  USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
   LL_USART_Init(USART1, &USART_InitStruct);
   LL_USART_ConfigAsyncMode(USART1);
   LL_USART_Enable(USART1);
-
-  /* REQUIRED: Enable Receive Data Register Not Empty interrupt */
-  LL_USART_EnableIT_RXNE(USART1);
-
-  /* CRITICAL: Enable USART RX interrupt */
-  LL_USART_EnableIT_RXNE(USART1);
-
-  /*  Enable USART1 NVIC Interrupt*/
-  NVIC_SetPriority(USART1_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
-  NVIC_EnableIRQ(USART1_IRQn);
+  /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
 
@@ -342,52 +330,65 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-
   LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-  /* GPIO Ports Clock Enable */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
-  GPIO_InitStruct.Pin         = LL_GPIO_PIN_13;
-  GPIO_InitStruct.Mode        = LL_GPIO_MODE_OUTPUT;
-  GPIO_InitStruct.Speed       = LL_GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.OutputType  = LL_GPIO_OUTPUT_PUSHPULL;
+  /* GPIO Ports Clock Enable */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+
+  /**/
+  LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+
+  /**/
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_13;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
   LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-  
-  /* Enable Clocks for AFIO (AFIO is required for EXTI mapping on F1 series) */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
+
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
 
   LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
   LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_13, LL_GPIO_MODE_OUTPUT);
 
-  /* Configure PB12 pin as Input with Pull-up resistor */
-  LL_GPIO_SetPinMode(BUTTON_PORT, BUTTON_PIN, LL_GPIO_MODE_INPUT);
-  LL_GPIO_SetPinPull(BUTTON_PORT, BUTTON_PIN, LL_GPIO_PULL_UP);
-
-  /* Map EXTI Line 12 to GPIOB Port (Connects PB12 to EXTI12 controller) */
-  LL_GPIO_AF_SetEXTISource(LL_GPIO_AF_EXTI_PORTB, LL_GPIO_AF_EXTI_LINE12);
-
-  LL_EXTI_EnableIT_0_31(LL_EXTI_LINE_12);
-  LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_12);
-
-  /* Enable EXTI Line 12 Interrupt in NVIC controller */
-  // Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15)
-  NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
-  NVIC_EnableIRQ(EXTI15_10_IRQn);
+  LL_GPIO_SetPinMode(GPIOB, LL_GPIO_PIN_12, LL_GPIO_MODE_INPUT);
+  LL_GPIO_SetPinPull(GPIOB, LL_GPIO_PIN_12, LL_GPIO_PULL_UP);
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+
+/** 
+
+* @brief  Reads the button with debounce and waits for release.
+* @retval 1 if a true button click occurred, 0 otherwise.
+*/
+uint8_t Process_Button(void)
+{
+  if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+  {
+    LL_mDelay(20); // Debounce delay
+    if (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+    {
+      // Wait until the user releases the button
+      while (LL_GPIO_IsInputPinSet(BUTTON_PORT, BUTTON_PIN) == 0U)
+      {
+        __NOP();
+      }
+      LL_mDelay(20); // Release debounce delay
+      return 1U;     // Valid click confirmed!
+    }
+  }
+  return 0U; // No valid click
+}
 
 void Update_LED_Behavior(uint8_t mode)
 {
@@ -408,7 +409,7 @@ void Update_LED_Behavior(uint8_t mode)
       Play_Light_Pattern(&onboardLED, sosPattern, sizeof(sosPattern)/sizeof(sosPattern[0]), currentMode);
       break;
 
-    case MODE_LED_HTB:
+    case MODE_LED_HEARTBIT:
       Play_Light_Pattern(&onboardLED, heartBeatPattern, sizeof(heartBeatPattern)/sizeof(heartBeatPattern[0]), currentMode);
       break;
 
@@ -439,7 +440,6 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
   // 1. OPERATION MODE CHANGE DETECTION
   if (currentPatternMode != last_mode)
   {
-      /*
 
       // Buffer where the string will be written (allocated with extra safety margin)
       char tx_buffer[64];
@@ -452,8 +452,6 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
       snprintf(tx_buffer, sizeof(tx_buffer), "@Play_Light_Pattern : currentPatternMode  = %d\r\n", currentPatternMode);
       // Transmit the formatted string over UART
       UART_Send_String(tx_buffer);
-
-      */
 
       pattern_step = 0U;              // Reset step index to the beginning of the new pattern
       last_led_update = LL_GetTick(); // Reset time reference to the current tick
@@ -475,7 +473,7 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
   }
 
   // 2. BOUNDARY SANITY CHECK
-  if (pattern_step >= length) {
+  if (pattern_step >= (length * 2)) {
       pattern_step = 0U; // Loop the pattern seamlessly back to the start
   }
 
@@ -483,7 +481,7 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
   // The uint32_t subtraction correctly handles LL_GetTick rollover every 49.7 days
   // 3. CORRECT ASYNCHRONOUS TIMER
   // Extract the time interval: for steps 0 and 1 it uses element, for 2 and 3 — element [1]
-  uint16_t current_interval = patternArray[pattern_step];
+  uint16_t current_interval = patternArray[pattern_step / 2];
 
   if ((LL_GetTick() - last_led_update) >= current_interval)
   {
