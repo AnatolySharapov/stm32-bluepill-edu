@@ -1,32 +1,29 @@
 @echo off
 rem ===================================================================
-rem Script Name : putty_run.bat
-rem PuTTY launch batch file
+rem Script Name   : putty_run.bat
+rem                 PuTTY launch batch file
+rem Description   : Automatically verifies the existence of PuTTY,
+rem                 logs the process to the console, and launches the app.
+rem Location      : Any directory or Desktop.
+rem Usage         : Double-click the script to run PuTTY.
+rem Author        : ChatGPT (OpenAI)
+rem Verifier      : Anatoly Sharapov
+rem Email         : anatoly.a.sharapov@gmail.com
+rem Repository    : https://github.com
+rem License       : MIT
 rem
-rem Description : Automatically verifies the existence of PuTTY,
-rem logs the process to the console, and launches the app.
-rem
-rem Location : Any directory or Desktop.
-rem
-rem Usage : Double-click the script to run PuTTY.
-rem
-rem Author : ChatGPT (OpenAI)
-rem Verifier : Anatoly Sharapov
-rem Email : anatoly.a.sharapov@gmail.com
-rem Repository : https://github.com
-rem License : MIT
-rem
-rem Date Created : August 7, 2026
+rem Date Created  : August 7, 2026
 rem Last Modified : August 7, 2026
-rem Version : 1.1.0
+rem Version       : 1.2.0
 rem
 rem Change History:
 rem -------------------------------------------------------------------
 rem Version 1.1.0 | Aug 7, 2026 | Added file existence check and
-rem | detailed console logging.
+rem                             | detailed console logging.
 rem Version 1.0.0 | Aug 7, 2026 | Initial script creation for 
-rem | PuTTY launching.
+rem                             | PuTTY launching.
 rem ===================================================================
+
 setlocal EnableExtensions EnableDelayedExpansion
 set "HEADER=1"
 set "SEP=0"

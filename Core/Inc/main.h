@@ -44,6 +44,15 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stddef.h>              /* Defines NULL pointer macro */
+#include "stm32f1xx_ll_usart.h"  /* Adds USART_InitTypeDef and UART functions */
+#include "stm32f1xx_ll_utils.h"  /* Adds delay functions like LL_mDelay */
+#include "stm32f1xx_ll_exti.h"   /* Adds EXTI line configuration and flag clearing */
+#include <string.h>              /* Required for strcmp function operations */
+#include <ctype.h>               /* Required for toupper() function for case conversion */
 
 /* USER CODE END Includes */
 
@@ -58,7 +67,21 @@ extern "C" {
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/
+
 /* USER CODE BEGIN EM */
+#define DEBUG_LOG_ENABLE 1
+
+#if defined(DEBUG_LOG_ENABLE) && (DEBUG_LOG_ENABLE == 1)
+  /* Automated logging macro with function name and line number prefix */
+  #define DEBUG_PRINT(fmt, ...) do { \
+    char tx_buf[128]; \
+    snprintf(tx_buf, sizeof(tx_buf), "[%s:%d] " fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+    UART_Send_String(tx_buf); \
+  } while(0)
+#else
+  /* Stripped out completely during the compilation process for release targets */
+  #define DEBUG_PRINT(fmt, ...)
+#endif
 
 /* USER CODE END EM */
 
@@ -66,6 +89,9 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+
+// FIX: Declare the function prototype so stm32f1xx_it.c knows it exists
+void UART_Send_String(const char *str);
 
 /* USER CODE END EFP */
 
@@ -87,17 +113,18 @@ void Error_Handler(void);
 
 void Delay(__IO uint32_t);
 
-// Definitions for our 4 LED modes
-#define MODE_LED_OFF            0U
-#define MODE_LED_ON             1U
-#define MODE_LED_SOS            2U
-#define MODE_LED_HTB            3U  // HeartBit
-#define TOTAL_MODES             3U
+/* Definitions for our 4 LED modes */
+#define MODE_LED_OFF 0U
+#define MODE_LED_ON  1U
+#define MODE_LED_SOS 2U
+#define MODE_LED_HTB 3U /* Heartbeat mode alias */
+#define TOTAL_MODES  4U /* Total number of available modes */
 
 /* Size of the USART receive buffer */
-#define RX_BUF_SIZE             32
+#define RX_BUF_SIZE 32
 
 /* USER CODE END Private defines */
+
 
 #ifdef __cplusplus
 }

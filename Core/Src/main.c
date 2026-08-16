@@ -21,14 +21,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stddef.h>              // Defines NULL pointer macro
-#include "stm32f1xx_ll_usart.h"  // FIX: Adds USART_InitTypeDef and UART functions
-#include <string.h>              // Required for strcmp function operations
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -70,9 +62,9 @@ __IO uint8_t *myDataPointer = NULL;      // A pointer variable (initialized to N
 // Flash-resident patterns to save RAM
 
 static const uint16_t sosPattern[] = {
-  150U, 150U, 150U, 150U, 150U, 500U, // Три точки и паузы (буква S)
-  500U, 150U, 500U, 150U, 500U, 500U, // Три тире и паузы (буква O)
-  150U, 150U, 150U, 150U, 150U, 800U  // Три точки и финальная пауза перед повтором (буква S)
+  150U, 150U, 150U, 150U, 150U, 500U, /* Three dots and pauses (Letter S) */
+  500U, 150U, 500U, 150U, 500U, 500U, /* Three dashes and pauses (Letter O) */
+  150U, 150U, 150U, 150U, 150U, 800U  /* Three dots and final pause before repeat (Letter S) */
 };
 
 static const uint16_t heartBeatPattern[] = {100U, 200U, 100U, 800U};
@@ -85,9 +77,13 @@ static const LED_TypeDef onboardLED =
   .isActiveLow = 1U // Blue Pill onboard LED turns ON on LOW state
 };
 
-extern volatile char rx_buffer[];
-extern volatile uint8_t rx_index;
-extern volatile uint8_t command_ready;
+/* Define and allocate memory for USART communication buffers and flags */
+volatile char rx_buffer[RX_BUF_SIZE] = {0}; /* Real memory allocation for the buffer */
+volatile uint8_t rx_index = 0U;             /* Real allocation for the index counter */
+volatile uint8_t command_ready = 0U;        /* Real allocation for the command ready flag */
+
+/* Track the timestamp of the last valid button press for software debouncing */
+uint32_t last_press_time = 0U;              /* Real allocation for debounce tracking */
 
 /* USER CODE END PV */
 
@@ -170,7 +166,8 @@ int main(void)
   /* Enable USART1 Receive Data Register Not Empty interrupt */
   LL_USART_EnableIT_RXNE(USART1);
 
-  UART_Send_String("STM32CubeIDE stm32-bluepill-edu has started\r\n");
+  /* Transmit system boot status message using the unified debug macro */
+  DEBUG_PRINT("STM32CubeIDE stm32-bluepill-edu has started\r\n");
 
   /* USER CODE END 2 */
 
@@ -187,30 +184,50 @@ int main(void)
     {
       command_ready = 0;
 
+      /* Convert the entire received string to UPPERCASE to ensure case-insensitivity */
+      for (uint8_t i = 0; rx_buffer[i] != '\0'; i++)
+      {
+        rx_buffer[i] = (char)toupper((int)rx_buffer[i]);
+      }
+
       /* Parse and evaluate the validated text string token */
       if (strcmp((const char*)rx_buffer, "OFF") == 0)
       {
         currentMode = MODE_LED_OFF;
-        UART_Send_String("\r\n-> Executed: LED turned OFF\r\n");
+        DEBUG_PRINT("Executed: LED turned OFF\r\n");
       }
       else if (strcmp((const char*)rx_buffer, "ON") == 0)
       {
         currentMode = MODE_LED_ON;
-        UART_Send_String("\r\n-> Executed: LED turned ON\r\n");
+        DEBUG_PRINT("Executed: LED turned ON\r\n");
       }
       else if (strcmp((const char*)rx_buffer, "SOS") == 0)
       {
         currentMode = MODE_LED_SOS;
-        UART_Send_String("\r\n-> Executed: Mode SOS activated\r\n");
+        DEBUG_PRINT("Executed: Mode SOS activated\r\n");
       }
       else if (strcmp((const char*)rx_buffer, "HB") == 0)
       {
         currentMode = MODE_LED_HTB;
-        UART_Send_String("\r\n-> Executed: Mode HeartBit activated\r\n");
+        DEBUG_PRINT("Executed: Mode Heartbeat activated\r\n");
+      }
+      else if (strcmp((const char*)rx_buffer, "HELP") == 0 || strcmp((const char*)rx_buffer, "?") == 0)
+      {
+        /* Print the complete help menu list to the user terminal */
+        DEBUG_PRINT("\r\n=== STM32 BLUE PILL LED CONTROLLER CLI ===\r\n");
+        DEBUG_PRINT("Available commands (case-insensitive):\r\n");
+        DEBUG_PRINT("  ON       - Turn the onboard LED constantly ON\r\n");
+        DEBUG_PRINT("  OFF      - Turn the onboard LED completely OFF\r\n");
+        DEBUG_PRINT("  SOS      - Activate Morse code SOS blinking pattern\r\n");
+        DEBUG_PRINT("  HB       - Activate Heartbeat blinking pattern\r\n");
+        DEBUG_PRINT("  HELP / ? - Display this interactive help summary menu\r\n");
+        DEBUG_PRINT("==========================================\r\n\r\n");
       }
       else
       {
-        UART_Send_String("\r\n-> Error: Unknown command packet string!\r\n");
+        /* Triggers on unknown commands or when the packet gets truncated due to buffer overflow */
+        DEBUG_PRINT("Error: Command rejected (Unknown or Buffer Overflow!)\r\n");
+        DEBUG_PRINT("Type 'HELP' or '?' to see the list of valid commands.\r\n");
       }
 
       __disable_irq();
@@ -220,7 +237,6 @@ int main(void)
       rx_index = 0;
 
       __enable_irq();
-
     }
 
     /* 1ms breath time to prevent debug locking issues */
@@ -238,31 +254,45 @@ int main(void)
   */
 void SystemClock_Config(void)
 {
-  LL_FLASH_SetLatency(LL_FLASH_LATENCY_0);
-  while(LL_FLASH_GetLatency()!= LL_FLASH_LATENCY_0)
+  /* 1. Configure Flash Latency for 72 MHz (Requires 2 Wait States) */
+  LL_FLASH_SetLatency(LL_FLASH_LATENCY_2);
+  while(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_2)
   {
+    /* Wait until Flash Latency is successfully updated */
   }
-  LL_RCC_HSI_SetCalibTrimming(16);
-  LL_RCC_HSI_Enable();
 
-   /* Wait till HSI is ready */
-  while(LL_RCC_HSI_IsReady() != 1)
+  /* 2. Enable External High-Speed Oscillator (HSE) */
+  LL_RCC_HSE_Enable();
+  while(LL_RCC_HSE_IsReady() != 1)
   {
-
+    /* Wait until external 8 MHz crystal oscillator stabilizes */
   }
-  LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
-  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
-  LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
-  LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSI);
 
-   /* Wait till System clock is ready */
-  while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSI)
+  /* 3. Configure PLL: Source = HSE (8 MHz), Multiplier = x9 -> 72 MHz */
+  LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_HSE_DIV_1, LL_RCC_PLL_MUL_9);
+  LL_RCC_PLL_Enable();
+  while(LL_RCC_PLL_IsReady() != 1)
   {
-
+    /* Wait until Phase-Locked Loop locks onto 72 MHz frequency */
   }
-  LL_Init1msTick(8000000);
-  LL_SetSystemCoreClock(8000000);
+
+  /* 4. Configure System Bus Prescalers */
+  LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);  /* HCLK = 72 MHz (Core Clock) */
+  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_2);   /* PCLK1 = 36 MHz (Max allowed for APB1) */
+  LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);   /* PCLK2 = 72 MHz (For GPIO and USART1) */
+
+  /* 5. Switch System Clock Source to PLL */
+  LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
+  while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
+  {
+    /* Wait until system seamlessly switches to PLL clocking */
+  }
+
+  /* 6. Re-initialize System Tick Timer for 1ms intervals at 72 MHz */
+  LL_Init1msTick(72000000);
+  LL_SetSystemCoreClock(72000000);
 }
+
 
 /**
   * @brief USART1 Initialization Function
@@ -298,8 +328,8 @@ static void MX_USART1_UART_Init(void)
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   GPIO_InitStruct.Pin = LL_GPIO_PIN_10;
-  GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT;       // Configure PA10 as Input
-  LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_10, LL_GPIO_PULL_UP); // Enable Pull-up resistor
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT; /* Configure PA10 as input */
+  LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_10, LL_GPIO_PULL_UP); /* Enable internal pull-up resistor */
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* USER CODE END USART1_Init 1 */
@@ -322,9 +352,6 @@ static void MX_USART1_UART_Init(void)
   LL_USART_Enable(USART1);
 
   /* REQUIRED: Enable Receive Data Register Not Empty interrupt */
-  LL_USART_EnableIT_RXNE(USART1);
-
-  /* CRITICAL: Enable USART RX interrupt */
   LL_USART_EnableIT_RXNE(USART1);
 
   /*  Enable USART1 NVIC Interrupt*/
@@ -380,7 +407,7 @@ static void MX_GPIO_Init(void)
   LL_EXTI_EnableFallingTrig_0_31(LL_EXTI_LINE_12);
 
   /* Enable EXTI Line 12 Interrupt in NVIC controller */
-  // Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15)
+  /* Line 12 on STM32F1 belongs to a shared vector EXTI15_10_IRQn (Lines 10 to 15) */
   NVIC_SetPriority(EXTI15_10_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
   NVIC_EnableIRQ(EXTI15_10_IRQn);
 
@@ -436,33 +463,21 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
   // Tracks the operation mode from the PREVIOUS function execution
   static uint8_t last_mode = 0U;
 
-  // 1. OPERATION MODE CHANGE DETECTION
+  /* 1. OPERATION MODE CHANGE DETECTION */
   if (currentPatternMode != last_mode)
   {
-      /*
+    /* Clean and secure logging using the custom preprocessor macro */
+    DEBUG_PRINT("@Play_Light_Pattern : length = %d\r\n", length);
+    DEBUG_PRINT("@Play_Light_Pattern : currentPatternMode = %d\r\n", currentPatternMode);
 
-      // Buffer where the string will be written (allocated with extra safety margin)
-      char tx_buffer[64];
-      // Format the string: %d specifies a signed decimal integer
-      snprintf(tx_buffer, sizeof(tx_buffer), "@Play_Light_Pattern : length  = %d\r\n", length);
-      // Transmit the formatted string over UART
-      UART_Send_String(tx_buffer);
+    pattern_step = 0U;              /* Reset step index to the beginning of the new pattern */
+    last_led_update = LL_GetTick(); /* Reset time reference to the current tick */
+    last_mode = currentPatternMode; /* Update the tracking variable with the new mode */
 
-      // Format the string: %d specifies a signed decimal integer
-      snprintf(tx_buffer, sizeof(tx_buffer), "@Play_Light_Pattern : currentPatternMode  = %d\r\n", currentPatternMode);
-      // Transmit the formatted string over UART
-      UART_Send_String(tx_buffer);
-
-      */
-
-      pattern_step = 0U;              // Reset step index to the beginning of the new pattern
-      last_led_update = LL_GetTick(); // Reset time reference to the current tick
-      last_mode = currentPatternMode; // Update the tracking variable with the new mode
-
-      // Optional: Turn off the LED during transition to start with a clean state
-      // High level turns off Active LOW LED
-      LL_GPIO_SetOutputPin(led->port, led->pin);
+    /* Optional: Turn off the LED during transition to start with a clean state */
+    LL_GPIO_SetOutputPin(led->port, led->pin);
   }
+
 
   // Immediately exit if the system is configured to "Off"
   if (currentPatternMode == MODE_LED_OFF) {

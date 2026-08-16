@@ -20,52 +20,17 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_it.h"
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-#include "stm32f1xx_ll_utils.h"
-#include "stm32f1xx_ll_exti.h"
 
-// FIX: Declare the function prototype so stm32f1xx_it.c knows it exists
-void UART_Send_String(const char *str);
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN TD */
-
-/* USER CODE END TD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-/* USER CODE BEGIN PV */
-
-extern __IO uint8_t currentMode; // Your existing variable
-static __IO uint32_t last_press_time = 0; // Timestamp of the last valid button press
-
-/* USART RX buffer definitions */
-volatile char rx_buffer[RX_BUF_SIZE];
-volatile uint8_t rx_index = 0;
-
-volatile uint8_t command_ready = 0; // Flag: 1 means the command line is fully received
-
-/* USER CODE END PV */
-
-/* Private function prototypes -----------------------------------------------*/
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/* Global tracking variables inherited from main.c for interrupt handling */
+extern volatile uint8_t currentMode;
+extern uint32_t last_press_time;
+
+/* USART buffers and flags inherited from main.c */
+extern volatile char rx_buffer[];
+extern volatile uint8_t rx_index;
+extern volatile uint8_t command_ready;
 
 /* USER CODE END 0 */
 
@@ -244,24 +209,27 @@ void USART1_IRQHandler(void)
       /* Check if the received character is a valid command terminator */
       if (received_char == '\n' || received_char == '\r')
       {
-      if (rx_index > 0) /* Ensure the buffer actually contains command letters */
-      {
-        rx_buffer[rx_index] = '\0'; /* Terminate the string safely */
-        command_ready = 1;          /* Notify the main loop that data is ready */
-      }
+        if (rx_index > 0) /* Ensure the buffer actually contains command letters */
+        {
+          rx_buffer[rx_index] = '\0'; /* Terminate the string safely */
+          command_ready = 1;          /* Notify the main loop that data is ready */
+        }
       }
       else
       {
         /* Ignore any unexpected leading control characters (like extra \r or \n) */
         if (received_char >= 32 && received_char <= 126)
         {
+          /* Secure check: ensure we leave exactly 1 byte for the null terminator '\0' */
           if (rx_index < (RX_BUF_SIZE - 1))
           {
             rx_buffer[rx_index++] = received_char;
           }
           else
           {
-            rx_index = 0; /* Reset index on buffer overflow constraint */
+            /* Hard constraint: buffer is full, force terminate and trigger error flag */
+            rx_buffer[rx_index] = '\0';
+            command_ready = 1;
           }
         }
       }
@@ -270,51 +238,48 @@ void USART1_IRQHandler(void)
   /* USER CODE END USART1_IRQn 0 */
 }
 
+
 /** 
 
 * @brief  This function handles EXTI Line 10 to 15 interrupts (Triggers on PB12 press).
 */
 void EXTI15_10_IRQHandler(void)
 {
+  /* USER CODE BEGIN EXTI15_10_IRQn 0 */
 
-  // USER CODE BEGIN EXTI15_10_IRQn 0 */
-
-  // Check if the interrupt was actually triggered by EXTI Line 12 (PB12)
+  /* Check if the interrupt was actually triggered by EXTI Line 12 (PB12) */
   if (LL_EXTI_IsActiveFlag_0_31(LL_EXTI_LINE_12) != RESET)
   {
-
-    // Clear the interrupt pending flag IMMEDIATELY to avoid infinite looping
+    /* Clear the interrupt pending flag immediately to avoid infinite ISR re-entry */
     LL_EXTI_ClearFlag_0_31(LL_EXTI_LINE_12);
 
-    // Get the current system uptime in milliseconds from SysTick
+    /* Get the current system uptime in milliseconds from SysTick counter */
     uint32_t current_time = LL_GetTick();
 
-    // Software debounce: check if 500 ms have passed since the last valid press
+    /* Software debounce: check if 500 ms have passed since the last valid press */
     if ((current_time - last_press_time) > 500)
     {
-      // If 500 ms passed, it is a valid button press, not a contact bounce
+      /* If 500 ms passed, it is a valid button press, not a contact bounce */
+      
+      /* Advance to the next sequential LED operational mode cyclically */
+      currentMode = (currentMode + 1) % TOTAL_MODES;
 
-      //  Advance to the next operation mode
-      currentMode++;
-      if (currentMode > TOTAL_MODES)
-      {
-        currentMode = MODE_LED_OFF;
-      }
-
-      // 6. Transmit the current status log via USART
+      /* Transmit the updated status log via unified automated macro */
       switch (currentMode)
       {
-        case MODE_LED_OFF:  UART_Send_String("Mode Changed: LED OFF\r\n");   break;
-        case MODE_LED_ON:   UART_Send_String("Mode Changed: LED ON\r\n");    break;
-        case MODE_LED_SOS:  UART_Send_String("Mode Changed: SOS \r\n");      break;
-        case MODE_LED_HTB:  UART_Send_String("Mode Changed: HEARTBEAT\r\n"); break;
+        case MODE_LED_OFF: DEBUG_PRINT("Mode Changed: LED OFF\r\n"); break;
+        case MODE_LED_ON:  DEBUG_PRINT("Mode Changed: LED ON\r\n"); break;
+        case MODE_LED_SOS: DEBUG_PRINT("Mode Changed: SOS\r\n"); break;
+        case MODE_LED_HTB: DEBUG_PRINT("Mode Changed: HEARTBEAT\r\n"); break;
         default: break;
       }
 
-      last_press_time = current_time; // Save the timestamp of the current valid press
-
+      /* Save the timestamp of the current valid press event */
+      last_press_time = current_time;
     }
   }
   /* USER CODE END EXTI15_10_IRQn 0 */
 }
+
+
 /* USER CODE END 1 */
