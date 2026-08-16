@@ -46,9 +46,9 @@ echo [Info] Target path set to Current Directory: %target_path%
 
 :: Check if the structural companion script exists
 if not exist "%ps_logic_file%" (
-    echo [Error] Companion logic script missing: strip_logic.ps1
-    echo [Error] Please ensure both files are placed in the same folder.
-    goto end
+  echo [Error] Companion logic script missing: strip_logic.ps1
+  echo [Error] Please ensure both files are placed in the same folder.
+  goto end
 )
 
 :: Validate path types using native CMD file system checks
@@ -71,10 +71,10 @@ echo [Info] Target identified as a Directory. Recursively scanning...
 set "files_found=0"
 
 for /r "%target_path%" %%f in (*.c *.h) do (
-    if exist "%%f" (
-        set /a "files_found+=1"
-        call :clean_file "%%f"
-    )
+  if exist "%%f" (
+    set /a "files_found+=1"
+    call :clean_file "%%f"
+  )
 )
 
 if "!files_found!"=="0" (
