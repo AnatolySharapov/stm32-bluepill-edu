@@ -182,8 +182,6 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /* USER CODE BEGIN 1 */
-// Link to the global variable defined in main.c
-extern __IO uint8_t currentMode;
 
 /** 
 
@@ -202,35 +200,41 @@ void USART1_IRQHandler(void)
     /* Echo feature: send the received character back to the transmitter host */
     while (!LL_USART_IsActiveFlag_TXE(USART1));
     LL_USART_TransmitData8(USART1, received_char);
-
-    /* Process characters only if the previous command has been evaluated in main */
-    if (command_ready == 0)
+    
+    /* CRITICAL SAFETY HACK: 
+       If the previous command has NOT been processed in main yet, ignore 
+       all new incoming characters. This protects rx_buffer from data corruption. */
+    if (command_ready == 1)
     {
-      /* Check if the received character is a valid command terminator */
-      if (received_char == '\n' || received_char == '\r')
+      return; 
+    }
+
+    /* Check if the received character is a valid command terminator */
+    /* Check for line termination characters */
+    if (received_char == '\n' || received_char == '\r')
+    {
+      if (rx_index > 0) /* Ensure the buffer actually contains command letters */
       {
-        if (rx_index > 0) /* Ensure the buffer actually contains command letters */
-        {
-          rx_buffer[rx_index] = '\0'; /* Terminate the string safely */
-          command_ready = 1;          /* Notify the main loop that data is ready */
-        }
+        rx_buffer[rx_index] = '\0'; /* Terminate the string safely */
+        command_ready = 1;          /* Notify the main loop that data is ready */
+                                    /* Set the atomic flag indicating data is ready */
       }
-      else
+    }
+    else
+    {
+      /* Ignore any unexpected leading control characters (like extra \r or \n) */
+      if (received_char >= 32 && received_char <= 126)
       {
-        /* Ignore any unexpected leading control characters (like extra \r or \n) */
-        if (received_char >= 32 && received_char <= 126)
+        /* Secure check: ensure we leave exactly 1 byte for the null terminator '\0' */
+        if (rx_index < (RX_BUF_SIZE - 1))
         {
-          /* Secure check: ensure we leave exactly 1 byte for the null terminator '\0' */
-          if (rx_index < (RX_BUF_SIZE - 1))
-          {
-            rx_buffer[rx_index++] = received_char;
-          }
-          else
-          {
-            /* Hard constraint: buffer is full, force terminate and trigger error flag */
-            rx_buffer[rx_index] = '\0';
-            command_ready = 1;
-          }
+          rx_buffer[rx_index++] = received_char;
+        }
+        else
+        {
+          /* Hard constraint: buffer is full, force terminate and trigger error flag */
+          rx_buffer[rx_index] = '\0';
+          command_ready = 1;
         }
       }
     }

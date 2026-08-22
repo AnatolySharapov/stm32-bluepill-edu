@@ -126,16 +126,15 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 
-  /* USER CODE END 1 */
-
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
   LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
 
-  /* System interrupt init*/
-  NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
+  /* System interrupt init : LL / CMSIS style */
+  NVIC_SetPriorityGrouping(0x03U);
+
+  /* USER CODE END 1 */
 
   /* SysTick_IRQn interrupt configuration */
   NVIC_SetPriority(SysTick_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),15, 0));
@@ -182,7 +181,9 @@ int main(void)
     /* Check if a complete command line packet was flagged via the ISR */
     if (command_ready)
     {
-      command_ready = 0;
+      /* CRITICAL: Do NOT clear command_ready here! 
+         While the buffer is being parsed via strcmp, the UART ISR will 
+         ignore new incoming data, protecting rx_buffer from corruption. */
 
       /* Convert the entire received string to UPPERCASE to ensure case-insensitivity */
       for (uint8_t i = 0; rx_buffer[i] != '\0'; i++)
@@ -229,12 +230,16 @@ int main(void)
         DEBUG_PRINT("Error: Command rejected (Unknown or Buffer Overflow!)\r\n");
         DEBUG_PRINT("Type 'HELP' or '?' to see the list of valid commands.\r\n");
       }
-
+      
+      /* CRITICAL SECTION: Temporarily disable interrupts during buffer flush */
       __disable_irq();
 
       /* CRITICAL: Safely flush the buffer memory before enabling the next packet reception */
       memset((void*)rx_buffer, 0, RX_BUF_SIZE);
       rx_index = 0;
+      
+      /* Clear flag to unlock the UART ISR for new incoming commands */
+      command_ready = 0; 
 
       __enable_irq();
     }
@@ -378,6 +383,8 @@ static void MX_GPIO_Init(void)
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
+  
+  /* Enable Clocks for AFIO (AFIO is required for EXTI mapping on F1 series) */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
 
   /* USER CODE END MX_GPIO_Init_1 */
@@ -389,12 +396,6 @@ static void MX_GPIO_Init(void)
   LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-  
-  /* Enable Clocks for AFIO (AFIO is required for EXTI mapping on F1 series) */
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
-
-  LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
-  LL_GPIO_SetPinMode(GPIOC, LL_GPIO_PIN_13, LL_GPIO_MODE_OUTPUT);
 
   /* Configure PB12 pin as Input with Pull-up resistor */
   LL_GPIO_SetPinMode(BUTTON_PORT, BUTTON_PIN, LL_GPIO_MODE_INPUT);
