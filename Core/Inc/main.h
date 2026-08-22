@@ -31,13 +31,24 @@ extern "C" {
 #include "stm32f1xx_ll_rcc.h"
 #include "stm32f1xx_ll_bus.h"
 #include "stm32f1xx_ll_system.h"
-#include "stm32f1xx_ll_exti.h"   /* Adds EXTI line configuration and flag clearing */
+
+/* Adds EXTI line configuration and flag clearing */
+#include "stm32f1xx_ll_exti.h"   
+
 #include "stm32f1xx_ll_cortex.h"
-#include "stm32f1xx_ll_utils.h"  /* Adds delay functions like LL_mDelay */
+
+/* Adds delay functions like LL_mDelay */
+#include "stm32f1xx_ll_utils.h" 
+ 
 #include "stm32f1xx_ll_pwr.h"
 #include "stm32f1xx_ll_dma.h"
-#include "stm32f1xx_ll_usart.h"  /* Adds USART_InitTypeDef and UART functions */
+
+/* Adds USART_InitTypeDef and UART functions */
+#include "stm32f1xx_ll_usart.h"  
 #include "stm32f1xx_ll_gpio.h"
+
+/* Adds Low-Layer TIM peripheral driver definitions */
+#include "stm32f1xx_ll_tim.h" 
 
 #if defined(USE_FULL_ASSERT)
 #include "stm32_assert.h"
@@ -104,13 +115,21 @@ void Delay(__IO uint32_t);
 #define MODE_LED_ON  1U
 #define MODE_LED_SOS 2U
 #define MODE_LED_HTB 3U /* Heartbeat mode alias */
-#define TOTAL_MODES  4U /* Total number of available modes */
 
 /* Size of the USART receive buffer */
 #define RX_BUF_SIZE 32
 
-/* USER CODE END Private defines */
+/* Expanded definition for PWM operational mode */
+#define MODE_LED_PWM 4U 
 
+/* Safely redefine the total modes count to include PWM without compiler warnings */
+#ifdef TOTAL_MODES
+#undef TOTAL_MODES
+#endif
+/* Updated total modes count to include PWM support */
+#define TOTAL_MODES  5U 
+
+/* USER CODE END Private defines */
 
 #ifdef __cplusplus
 }

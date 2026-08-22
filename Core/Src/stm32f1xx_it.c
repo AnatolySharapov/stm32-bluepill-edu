@@ -275,6 +275,7 @@ void EXTI15_10_IRQHandler(void)
         case MODE_LED_ON:  DEBUG_PRINT("Mode Changed: LED ON\r\n"); break;
         case MODE_LED_SOS: DEBUG_PRINT("Mode Changed: SOS\r\n"); break;
         case MODE_LED_HTB: DEBUG_PRINT("Mode Changed: HEARTBEAT\r\n"); break;
+        case MODE_LED_PWM: DEBUG_PRINT("Mode Changed: PWM BREATHING\r\n"); break;
         default: break;
       }
 

@@ -102,9 +102,8 @@ uint32_t LL_GetTick(void);
 void UART_Send_String(const char *str);
 uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
-
-// Now function accepts a pointer to our LED configuration and a pattern
 void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length, uint8_t currentPatternMode);
+static void MX_TIM1_PWM_Init(void);
 
 /* USER CODE END PFP */
 
@@ -160,6 +159,9 @@ int main(void)
   // Initialize all configured peripherals (including the EXTI button and LED GPIOs)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
+  
+  /* Initialize TIM1 Channel 1 for hardware PWM generation */
+  MX_TIM1_PWM_Init(); 
 
   /* USER CODE BEGIN 2 */
 
@@ -394,6 +396,11 @@ void Main_Process_Loop(void)
         currentMode = MODE_LED_HTB;
         DEBUG_PRINT("Executed: Mode Heartbeat activated\r\n");
       }
+      else if (strcmp((const char*)rx_buffer, "PWM") == 0)
+      {
+        currentMode = MODE_LED_PWM;
+        DEBUG_PRINT("Executed: PWM Breathing mode activated on PA8\r\n");
+      }
       else if (strcmp((const char*)rx_buffer, "HELP") == 0 || strcmp((const char*)rx_buffer, "?") == 0)
       {
         /* Print the complete help menu list to the user terminal */
@@ -403,6 +410,7 @@ void Main_Process_Loop(void)
         DEBUG_PRINT("  OFF  - Turn the onboard LED completely OFF\r\n");
         DEBUG_PRINT("  SOS  - Activate Morse code SOS blinking pattern\r\n");
         DEBUG_PRINT("  HB   - Activate Heartbeat blinking pattern\r\n");
+        DEBUG_PRINT("  PWM  - Activate hardware fading breathing pattern on PA8\r\n");
         DEBUG_PRINT("  HELP / ? - Display this interactive help summary menu\r\n");
         DEBUG_PRINT("==========================================\r\n\r\n");
       }
@@ -432,6 +440,16 @@ void Main_Process_Loop(void)
 void Update_LED_Behavior(uint8_t mode)
 {
 
+  static uint32_t last_pwm_update = 0;
+  static int16_t duty_cycle = 0;
+  static int8_t fade_direction = 1;
+  
+  /* Turn off PWM output state if the current mode is not active PWM */
+  if (mode != MODE_LED_PWM)
+  {
+    LL_TIM_CC_DisableChannel(TIM1, LL_TIM_CHANNEL_CH1);
+  }
+  
   switch (mode)
   {
     case MODE_LED_OFF: /* Mode 0: LED OFF */
@@ -448,8 +466,33 @@ void Update_LED_Behavior(uint8_t mode)
       Play_Light_Pattern(&onboardLED, sosPattern, sizeof(sosPattern)/sizeof(sosPattern[0]), currentMode);
       break;
 
-    case MODE_LED_HTB:
+    case MODE_LED_HTB: /* Mode 3 */
       Play_Light_Pattern(&onboardLED, heartBeatPattern, sizeof(heartBeatPattern)/sizeof(heartBeatPattern[0]), currentMode);
+      break;
+
+    case MODE_LED_PWM: /* Mode 4: Non-blocking hardware fading loop */
+      LL_TIM_CC_EnableChannel(TIM1, LL_TIM_CHANNEL_CH1);
+      
+      /* Smoothly update duty cycle value every 5 milliseconds */
+      if ((LL_GetTick() - last_pwm_update) >= 5)
+      {
+        last_pwm_update = LL_GetTick();
+        duty_cycle += (fade_direction * 10); /* Step size */
+
+        if (duty_cycle >= 990)
+        {
+          duty_cycle = 990;
+          fade_direction = -1; /* Change direction to fade out */
+        }
+        else if (duty_cycle <= 0)
+        {
+          duty_cycle = 0;
+          fade_direction = 1;  /* Change direction to fade in */
+        }
+        
+        /* Apply updated compare value to Timer 1 Capture Compare Register 1 */
+        LL_TIM_OC_SetCompareCH1(TIM1, duty_cycle);
+      }
       break;
 
     default:
@@ -553,6 +596,54 @@ void UART_Send_String(const char *str)
     str++;
   }
 }
+
+/**
+  * @brief  TIM1 Initialization Function for PWM generation on PA8 (Channel 1).
+  * @param  None
+  * @retval None
+  */
+static void MX_TIM1_PWM_Init(void)
+{
+  LL_TIM_InitTypeDef TIM_InitStruct = {0};
+  LL_TIM_OC_InitTypeDef TIM_OC_InitStruct = {0};
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* 1. Enable peripheral clocks for GPIOA and TIM1 */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_TIM1);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+
+  /* 2. Configure PA8 as Alternate Function Push-Pull for TIM1_CH1 output */
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_8;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* 3. Configure Time Base: Frequency = 72MHz / (71 + 1) / (999 + 1) = 1000 Hz (1 kHz) */
+  TIM_InitStruct.Prescaler = 71; 
+  TIM_InitStruct.CounterMode = LL_TIM_COUNTERMODE_UP;
+  TIM_InitStruct.Autoreload = 999; 
+  TIM_InitStruct.ClockDivision = LL_TIM_CLOCKDIVISION_DIV1;
+  TIM_InitStruct.RepetitionCounter = 0;
+  LL_TIM_Init(TIM1, &TIM_InitStruct);
+  LL_TIM_EnableARRPreload(TIM1);
+
+  /* 4. Configure Output Channel 1 in PWM Mode 1 */
+  TIM_OC_InitStruct.OCMode = LL_TIM_OCMODE_PWM1;
+  TIM_OC_InitStruct.OCState = LL_TIM_OCSTATE_DISABLE;
+  TIM_OC_InitStruct.OCNState = LL_TIM_OCSTATE_DISABLE;
+  TIM_OC_InitStruct.CompareValue = 0; /* Start with 0% duty cycle */
+  TIM_OC_InitStruct.OCPolarity = LL_TIM_OCPOLARITY_HIGH;
+  LL_TIM_OC_Init(TIM1, LL_TIM_CHANNEL_CH1, &TIM_OC_InitStruct);
+  LL_TIM_OC_EnablePreload(TIM1, LL_TIM_CHANNEL_CH1);
+
+  /* 5. Enable Main Output (MOE) - Mandatory requirement for advanced Timer 1 */
+  LL_TIM_EnableAllOutputs(TIM1);
+
+  /* 6. Enable Counter to start the hardware timer module */
+  LL_TIM_EnableCounter(TIM1);
+}
+
 
 /* USER CODE END 4 */
 
