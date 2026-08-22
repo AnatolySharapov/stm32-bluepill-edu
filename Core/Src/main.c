@@ -89,7 +89,10 @@ uint32_t last_press_time = 0U;              /* Real allocation for debounce trac
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-// Private Function Prototypes
+
+/* Function prototype for the main application processing loop */
+void Main_Process_Loop(void); 
+
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
@@ -172,84 +175,15 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-  while (1)
-  {
-    /* Handle asynchronous non-blocking LED state execution path */
-    Update_LED_Behavior(currentMode);
-
-    /* Check if a complete command line packet was flagged via the ISR */
-    if (command_ready)
-    {
-      /* CRITICAL: Do NOT clear command_ready here! 
-         While the buffer is being parsed via strcmp, the UART ISR will 
-         ignore new incoming data, protecting rx_buffer from corruption. */
-
-      /* Convert the entire received string to UPPERCASE to ensure case-insensitivity */
-      for (uint8_t i = 0; rx_buffer[i] != '\0'; i++)
-      {
-        rx_buffer[i] = (char)toupper((int)rx_buffer[i]);
-      }
-
-      /* Parse and evaluate the validated text string token */
-      if (strcmp((const char*)rx_buffer, "OFF") == 0)
-      {
-        currentMode = MODE_LED_OFF;
-        DEBUG_PRINT("Executed: LED turned OFF\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "ON") == 0)
-      {
-        currentMode = MODE_LED_ON;
-        DEBUG_PRINT("Executed: LED turned ON\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "SOS") == 0)
-      {
-        currentMode = MODE_LED_SOS;
-        DEBUG_PRINT("Executed: Mode SOS activated\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "HB") == 0)
-      {
-        currentMode = MODE_LED_HTB;
-        DEBUG_PRINT("Executed: Mode Heartbeat activated\r\n");
-      }
-      else if (strcmp((const char*)rx_buffer, "HELP") == 0 || strcmp((const char*)rx_buffer, "?") == 0)
-      {
-        /* Print the complete help menu list to the user terminal */
-        DEBUG_PRINT("\r\n=== STM32 BLUE PILL LED CONTROLLER CLI ===\r\n");
-        DEBUG_PRINT("Available commands (case-insensitive):\r\n");
-        DEBUG_PRINT("  ON       - Turn the onboard LED constantly ON\r\n");
-        DEBUG_PRINT("  OFF      - Turn the onboard LED completely OFF\r\n");
-        DEBUG_PRINT("  SOS      - Activate Morse code SOS blinking pattern\r\n");
-        DEBUG_PRINT("  HB       - Activate Heartbeat blinking pattern\r\n");
-        DEBUG_PRINT("  HELP / ? - Display this interactive help summary menu\r\n");
-        DEBUG_PRINT("==========================================\r\n\r\n");
-      }
-      else
-      {
-        /* Triggers on unknown commands or when the packet gets truncated due to buffer overflow */
-        DEBUG_PRINT("Error: Command rejected (Unknown or Buffer Overflow!)\r\n");
-        DEBUG_PRINT("Type 'HELP' or '?' to see the list of valid commands.\r\n");
-      }
-      
-      /* CRITICAL SECTION: Temporarily disable interrupts during buffer flush */
-      __disable_irq();
-
-      /* CRITICAL: Safely flush the buffer memory before enabling the next packet reception */
-      memset((void*)rx_buffer, 0, RX_BUF_SIZE);
-      rx_index = 0;
-      
-      /* Clear flag to unlock the UART ISR for new incoming commands */
-      command_ready = 0; 
-
-      __enable_irq();
-    }
-
-    /* 1ms breath time to prevent debug locking issues */
-    LL_mDelay(1);
-  }
+  
+  /* Call the custom application loop processing function */
+  Main_Process_Loop();
 
   /* USER CODE END WHILE */
   /* USER CODE BEGIN 3 */
+  
+  /* Execution path should never reach this point */
+  
   /* USER CODE END 3 */
 }
 
@@ -416,6 +350,84 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/* USER CODE BEGIN 4 */
+
+/**
+  * @brief  Main infinite application processing loop (extracted from main).
+  * @retval None
+  */
+void Main_Process_Loop(void)
+{
+  while (1)
+  {
+    /* 1. Handle asynchronous non-blocking LED state execution path */
+    Update_LED_Behavior(currentMode);
+
+    /* 2. Check if a complete command line packet was flagged via the ISR */
+    if (command_ready)
+    {
+      /* Convert the entire received string to UPPERCASE to ensure case-insensitivity */
+      for (uint8_t i = 0; rx_buffer[i] != '\0'; i++)
+      {
+        rx_buffer[i] = (char)toupper((int)rx_buffer[i]);
+      }
+
+      /* Parse and evaluate the validated text string token */
+      if (strcmp((const char*)rx_buffer, "OFF") == 0)
+      {
+        currentMode = MODE_LED_OFF;
+        DEBUG_PRINT("Executed: LED turned OFF\r\n");
+      }
+      else if (strcmp((const char*)rx_buffer, "ON") == 0)
+      {
+        currentMode = MODE_LED_ON;
+        DEBUG_PRINT("Executed: LED turned ON\r\n");
+      }
+      else if (strcmp((const char*)rx_buffer, "SOS") == 0)
+      {
+        currentMode = MODE_LED_SOS;
+        DEBUG_PRINT("Executed: Mode SOS activated\r\n");
+      }
+      else if (strcmp((const char*)rx_buffer, "HB") == 0)
+      {
+        currentMode = MODE_LED_HTB;
+        DEBUG_PRINT("Executed: Mode Heartbeat activated\r\n");
+      }
+      else if (strcmp((const char*)rx_buffer, "HELP") == 0 || strcmp((const char*)rx_buffer, "?") == 0)
+      {
+        /* Print the complete help menu list to the user terminal */
+        DEBUG_PRINT("\r\n=== STM32 BLUE PILL LED CONTROLLER CLI ===\r\n");
+        DEBUG_PRINT("Available commands (case-insensitive):\r\n");
+        DEBUG_PRINT("  ON   - Turn the onboard LED constantly ON\r\n");
+        DEBUG_PRINT("  OFF  - Turn the onboard LED completely OFF\r\n");
+        DEBUG_PRINT("  SOS  - Activate Morse code SOS blinking pattern\r\n");
+        DEBUG_PRINT("  HB   - Activate Heartbeat blinking pattern\r\n");
+        DEBUG_PRINT("  HELP / ? - Display this interactive help summary menu\r\n");
+        DEBUG_PRINT("==========================================\r\n\r\n");
+      }
+      else
+      {
+        /* Triggers on unknown commands or when the packet gets truncated due to buffer overflow */
+        DEBUG_PRINT("Error: Command rejected (Unknown or Buffer Overflow!)\r\n");
+        DEBUG_PRINT("Type 'HELP' or '?' to see the list of valid commands.\r\n");
+      }
+
+      /* CRITICAL SECTION: Temporarily disable interrupts during buffer flush */
+      __disable_irq();
+
+      /* CRITICAL: Safely flush the buffer memory before enabling the next packet reception */
+      memset((void*)rx_buffer, 0, RX_BUF_SIZE);
+      rx_index = 0;
+      command_ready = 0; /* Clear flag to unlock the UART ISR for new incoming commands */
+
+      __enable_irq();
+    }
+
+    /* 1ms breath time to prevent debug locking issues */
+    LL_mDelay(1);
+  }
+}
 
 void Update_LED_Behavior(uint8_t mode)
 {
