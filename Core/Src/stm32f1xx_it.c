@@ -286,5 +286,20 @@ void EXTI15_10_IRQHandler(void)
   /* USER CODE END EXTI15_10_IRQn 0 */
 }
 
+/**
+  * @brief  This function handles DMA1 Channel 4 global interrupt triggered on TX done.
+  */
+void DMA1_Channel4_IRQHandler(void)
+{
+  /* Check if the Transfer Complete interrupt flag is active for Channel 4 */
+  if (LL_DMA_IsActiveFlag_TC4(DMA1))
+  {
+    /* Clear Transfer Complete flag to acknowledge interrupt processing */
+    LL_DMA_ClearFlag_TC4(DMA1);
+    
+    /* Disable DMA channel to return peripheral to a clean, stable idle state */
+    LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_4);
+  }
+}
 
 /* USER CODE END 1 */

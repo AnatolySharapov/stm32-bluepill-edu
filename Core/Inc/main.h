@@ -28,23 +28,35 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f1xx.h"
+
+/* Low-Layer Reset and Clock Control driver for oscillator and peripheral frequency management */
 #include "stm32f1xx_ll_rcc.h"
+
+/* Low-Layer peripheral bus clock enablement driver for AHB, APB1, and APB2 domains */
 #include "stm32f1xx_ll_bus.h"
+
+/* Low-Layer system configuration driver for Flash memory latency and core reset management */
 #include "stm32f1xx_ll_system.h"
 
 /* Adds EXTI line configuration and flag clearing */
 #include "stm32f1xx_ll_exti.h"   
 
+/* Low-Layer processor core functions and SysTick/NVIC management driver */
 #include "stm32f1xx_ll_cortex.h"
 
 /* Adds delay functions like LL_mDelay */
 #include "stm32f1xx_ll_utils.h" 
  
+/* Low-Layer power control and power-saving management driver */
 #include "stm32f1xx_ll_pwr.h"
+
+/* Connects Low-Layer DMA hardware module definitions */
 #include "stm32f1xx_ll_dma.h"
 
 /* Adds USART_InitTypeDef and UART functions */
-#include "stm32f1xx_ll_usart.h"  
+#include "stm32f1xx_ll_usart.h"
+
+  /* Low-Layer GPIO driver for pin mode configuration, state toggling, and alternate function mapping */
 #include "stm32f1xx_ll_gpio.h"
 
 /* Adds Low-Layer TIM peripheral driver definitions */

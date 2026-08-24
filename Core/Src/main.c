@@ -88,14 +88,16 @@ uint32_t last_press_time = 0U;              /* Real allocation for debounce trac
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
-/* Function prototype for the main application processing loop */
-void Main_Process_Loop(void); 
 
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM1_PWM_Init(void);
 
 // STM32 peripheral function prototypes
 uint32_t LL_GetTick(void);
@@ -103,7 +105,9 @@ void UART_Send_String(const char *str);
 uint8_t Process_Button(void);
 void Update_LED_Behavior(uint8_t mode);
 void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, uint8_t length, uint8_t currentPatternMode);
-static void MX_TIM1_PWM_Init(void);
+
+/* Function prototype for the main application processing loop */
+void Main_Process_Loop(void); 
 
 /* USER CODE END PFP */
 
@@ -138,6 +142,15 @@ int main(void)
 
   /* USER CODE END 1 */
 
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+
+  /* System interrupt init*/
+  NVIC_SetPriorityGrouping(3);
+
   /* SysTick_IRQn interrupt configuration */
   NVIC_SetPriority(SysTick_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),15, 0));
 
@@ -156,13 +169,10 @@ int main(void)
 
   /* USER CODE END SysInit */
 
-  // Initialize all configured peripherals (including the EXTI button and LED GPIOs)
+  /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART1_UART_Init();
-  
-  /* Initialize TIM1 Channel 1 for hardware PWM generation */
-  MX_TIM1_PWM_Init(); 
-
   /* USER CODE BEGIN 2 */
 
   LL_SYSTICK_EnableIT();
@@ -181,8 +191,9 @@ int main(void)
   /* Call the custom application loop processing function */
   Main_Process_Loop();
 
-  /* USER CODE END WHILE */
-  /* USER CODE BEGIN 3 */
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
   
   /* Execution path should never reach this point */
   
@@ -195,45 +206,31 @@ int main(void)
   */
 void SystemClock_Config(void)
 {
-  /* 1. Configure Flash Latency for 72 MHz (Requires 2 Wait States) */
-  LL_FLASH_SetLatency(LL_FLASH_LATENCY_2);
-  while(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_2)
+  LL_FLASH_SetLatency(LL_FLASH_LATENCY_0);
+  while(LL_FLASH_GetLatency()!= LL_FLASH_LATENCY_0)
   {
-    /* Wait until Flash Latency is successfully updated */
   }
+  LL_RCC_HSI_SetCalibTrimming(16);
+  LL_RCC_HSI_Enable();
 
-  /* 2. Enable External High-Speed Oscillator (HSE) */
-  LL_RCC_HSE_Enable();
-  while(LL_RCC_HSE_IsReady() != 1)
+   /* Wait till HSI is ready */
+  while(LL_RCC_HSI_IsReady() != 1)
   {
-    /* Wait until external 8 MHz crystal oscillator stabilizes */
-  }
 
-  /* 3. Configure PLL: Source = HSE (8 MHz), Multiplier = x9 -> 72 MHz */
-  LL_RCC_PLL_ConfigDomain_SYS(LL_RCC_PLLSOURCE_HSE_DIV_1, LL_RCC_PLL_MUL_9);
-  LL_RCC_PLL_Enable();
-  while(LL_RCC_PLL_IsReady() != 1)
+  }
+  LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);
+  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_1);
+  LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);
+  LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_HSI);
+
+   /* Wait till System clock is ready */
+  while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_HSI)
   {
-    /* Wait until Phase-Locked Loop locks onto 72 MHz frequency */
+
   }
-
-  /* 4. Configure System Bus Prescalers */
-  LL_RCC_SetAHBPrescaler(LL_RCC_SYSCLK_DIV_1);  /* HCLK = 72 MHz (Core Clock) */
-  LL_RCC_SetAPB1Prescaler(LL_RCC_APB1_DIV_2);   /* PCLK1 = 36 MHz (Max allowed for APB1) */
-  LL_RCC_SetAPB2Prescaler(LL_RCC_APB2_DIV_1);   /* PCLK2 = 72 MHz (For GPIO and USART1) */
-
-  /* 5. Switch System Clock Source to PLL */
-  LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
-  while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL)
-  {
-    /* Wait until system seamlessly switches to PLL clocking */
-  }
-
-  /* 6. Re-initialize System Tick Timer for 1ms intervals at 72 MHz */
-  LL_Init1msTick(72000000);
-  LL_SetSystemCoreClock(72000000);
+  LL_Init1msTick(8000000);
+  LL_SetSystemCoreClock(8000000);
 }
-
 
 /**
   * @brief USART1 Initialization Function
@@ -245,42 +242,62 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE BEGIN USART1_Init 0 */
 
-  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-  /* Peripheral clock enable */
-
-  /* 1. Enable Peripheral Clocks for GPIOA and USART1 */
+  /* Enable Peripheral Clocks for GPIOA and USART1 */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
 
   /* USER CODE END USART1_Init 0 */
+  
+  LL_USART_InitTypeDef USART_InitStruct = {0};
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* USART1 DMA Init */
+  LL_DMA_SetDataTransferDirection(DMA1, LL_DMA_CHANNEL_4, LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
+  LL_DMA_SetChannelPriorityLevel(DMA1, LL_DMA_CHANNEL_4, LL_DMA_PRIORITY_LOW);
+  LL_DMA_SetMode(DMA1, LL_DMA_CHANNEL_4, LL_DMA_MODE_NORMAL);
+  LL_DMA_SetPeriphIncMode(DMA1, LL_DMA_CHANNEL_4, LL_DMA_PERIPH_NOINCREMENT);
+  LL_DMA_SetMemoryIncMode(DMA1, LL_DMA_CHANNEL_4, LL_DMA_MEMORY_INCREMENT);
+  LL_DMA_SetPeriphSize(DMA1, LL_DMA_CHANNEL_4, LL_DMA_PDATAALIGN_BYTE);
+  LL_DMA_SetMemorySize(DMA1, LL_DMA_CHANNEL_4, LL_DMA_MDATAALIGN_BYTE);
 
   /* USER CODE BEGIN USART1_Init 1 */
-
-  /**USART1 GPIO Configuration
+  
+  /** USART1 GPIO Configuration
   PA9   ------> USART1_TX
   PA10   ------> USART1_RX
   */
-
+  
+  /* USART1_TX Init */
   GPIO_InitStruct.Pin         = LL_GPIO_PIN_9;
   GPIO_InitStruct.Mode        = LL_GPIO_MODE_ALTERNATE;
   GPIO_InitStruct.Speed       = LL_GPIO_SPEED_FREQ_HIGH;
   GPIO_InitStruct.OutputType  = LL_GPIO_OUTPUT_PUSHPULL;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /* USART1_RX Init */
   GPIO_InitStruct.Pin = LL_GPIO_PIN_10;
   GPIO_InitStruct.Mode = LL_GPIO_MODE_INPUT; /* Configure PA10 as input */
   LL_GPIO_SetPinPull(GPIOA, LL_GPIO_PIN_10, LL_GPIO_PULL_UP); /* Enable internal pull-up resistor */
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  USART_InitStruct.BaudRate = 115200;
+  USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
+  USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
+  USART_InitStruct.Parity = LL_USART_PARITY_NONE;
+  USART_InitStruct.TransferDirection = LL_USART_DIRECTION_TX_RX;
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;
+  USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
+  LL_USART_Init(USART1, &USART_InitStruct);
+  LL_USART_ConfigAsyncMode(USART1);
+  LL_USART_Enable(USART1);
+  
   /* USER CODE END USART1_Init 1 */
-
+  
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* Configure USART1 Hardware Parameters */
   // We assume default 8MHz or 72MHz clock.
   // LL_USART_Init calculates the baudrate automatically.
-  LL_USART_InitTypeDef USART_InitStruct = {0};
   USART_InitStruct.BaudRate            = 115200U;                  // Speed: 115200 bits per second
   USART_InitStruct.DataWidth           = LL_USART_DATAWIDTH_8B;    // 8 bits of data
   USART_InitStruct.StopBits            = LL_USART_STOPBITS_1;      // 1 stop bit
@@ -298,6 +315,9 @@ static void MX_USART1_UART_Init(void)
   /*  Enable USART1 NVIC Interrupt*/
   NVIC_SetPriority(USART1_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
   NVIC_EnableIRQ(USART1_IRQn);
+  
+  /* Enable DMA transmit requests for USART1 hardware module */
+  LL_USART_EnableDMAReq_TX(USART1);
 
   /* USER CODE END USART1_Init 2 */
 
@@ -310,7 +330,6 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -322,13 +341,27 @@ static void MX_GPIO_Init(void)
   
   /* Enable Clocks for AFIO (AFIO is required for EXTI mapping on F1 series) */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_AFIO);
-
-  /* USER CODE END MX_GPIO_Init_1 */
-
+  
   GPIO_InitStruct.Pin         = LL_GPIO_PIN_13;
   GPIO_InitStruct.Mode        = LL_GPIO_MODE_OUTPUT;
   GPIO_InitStruct.Speed       = LL_GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.OutputType  = LL_GPIO_OUTPUT_PUSHPULL;
+  LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOC);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+
+  /**/
+  LL_GPIO_ResetOutputPin(GPIOC, LL_GPIO_PIN_13);
+
+  /**/
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_13;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
   LL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -572,30 +605,46 @@ void Play_Light_Pattern(const LED_TypeDef *led, const uint16_t *patternArray, ui
   }
 }
 
-/** 
-
-* @brief  Sends a null-terminated string over USART1 using pointers.
-* @param  str: Pointer to the character array (string).
-* @retval None
-*/
+/**
+  * @brief  Sends a null-terminated string over USART1 asynchronously using DMA1.
+  * @param  str: Pointer to the character array (string).
+  * @retval None
+  */
 void UART_Send_String(const char *str)
 {
-  // Loop runs until the pointer hits the '\0' null-terminator byte
-  while (*str != '\0')
+  static char dma_tx_buffer[128]; /* Dedicated safe memory buffer for DMA execution */
+  
+  /* 1. Block only if a previous DMA transmission is still actively running */
+  while (LL_DMA_IsEnabledChannel(DMA1, LL_DMA_CHANNEL_4))
   {
-    // 1. Wait until the Transmit Data Register is empty (ready to accept next byte)
-    while (LL_USART_IsActiveFlag_TXE(USART1) == 0U)
-    {
-      __NOP(); // Wait
-    }
-
-    // 2. Transmit the current single character by dereferencing the pointer
-    LL_USART_TransmitData8(USART1, *str);
-
-    // 3. Move the pointer to the next character in memory (Pointer arithmetic)
-    str++;
+    __NOP(); 
   }
+
+  /* 2. Safely calculate length and copy string data into the dedicated buffer */
+  uint32_t length = strlen(str);
+  if (length == 0 || length >= sizeof(dma_tx_buffer))
+  {
+    return; /* Guard against empty strings or buffer overflow runtime scenarios */
+  }
+  memcpy(dma_tx_buffer, str, length);
+
+  /* 3. Disable channel to reprogram new length and address parameters */
+  LL_DMA_DisableChannel(DMA1, LL_DMA_CHANNEL_4);
+
+  /* 4. Update memory address source pointer and specific transfer length count */
+  LL_DMA_SetMemoryAddress(DMA1, LL_DMA_CHANNEL_4, (uint32_t)dma_tx_buffer);
+  LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_4, length);
+
+  /* 5. Clear global transfer complete interrupt flag before enabling channel */
+  LL_DMA_ClearFlag_TC4(DMA1);
+  
+  /* 6. Enable global Transfer Complete interrupt for Channel 4 management */
+  LL_DMA_EnableIT_TC(DMA1, LL_DMA_CHANNEL_4);
+
+  /* 7. Start the asynchronous hardware memory transmission path */
+  LL_DMA_EnableChannel(DMA1, LL_DMA_CHANNEL_4);
 }
+
 
 /**
   * @brief  TIM1 Initialization Function for PWM generation on PA8 (Channel 1).
@@ -644,6 +693,37 @@ static void MX_TIM1_PWM_Init(void)
   LL_TIM_EnableCounter(TIM1);
 }
 
+/**
+  * @brief  DMA1 Initialization Function for USART1_TX (Channel 4) automation.
+  * @param  None
+  * @retval None
+  */
+static void MX_DMA_Init(void)
+{
+  /* Init with LL driver */
+  
+  /* Enable peripheral clock for DMA1 controller */
+  LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_DMA1);
+
+  /* Configure DMA1 Channel 4 parameters for memory-to-peripheral transfer */
+  LL_DMA_ConfigAddresses(DMA1, LL_DMA_CHANNEL_4,
+                         (uint32_t)0, /* Will be set dynamically during transmission */
+                         LL_USART_DMA_GetRegAddr(USART1),
+                         LL_DMA_DIRECTION_MEMORY_TO_PERIPH);
+
+  LL_DMA_SetDataLength(DMA1, LL_DMA_CHANNEL_4, 0);
+
+  LL_DMA_SetMode(DMA1, LL_DMA_CHANNEL_4, LL_DMA_MODE_NORMAL);
+  LL_DMA_SetPeriphIncMode(DMA1, LL_DMA_CHANNEL_4, LL_DMA_PERIPH_NOINCREMENT);
+  LL_DMA_SetMemoryIncMode(DMA1, LL_DMA_CHANNEL_4, LL_DMA_MEMORY_INCREMENT);
+  LL_DMA_SetPeriphSize(DMA1, LL_DMA_CHANNEL_4, LL_DMA_PDATAALIGN_BYTE);
+  LL_DMA_SetMemorySize(DMA1, LL_DMA_CHANNEL_4, LL_DMA_MDATAALIGN_BYTE);
+  LL_DMA_SetChannelPriorityLevel(DMA1, LL_DMA_CHANNEL_4, LL_DMA_PRIORITY_LOW);
+
+  /* Configure DMA1 Channel 4 Interrupt in NVIC for completion tracking */
+  NVIC_SetPriority(DMA1_Channel4_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 5, 0));
+  NVIC_EnableIRQ(DMA1_Channel4_IRQn);
+}
 
 /* USER CODE END 4 */
 
